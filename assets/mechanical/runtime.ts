@@ -4,7 +4,6 @@ import type { Plugin } from '@forgeax/engine/plugin';
 import { PROPAGATE_TRANSFORMS_SYSTEM, Transform } from '@forgeax/engine/scene';
 import type { GameProjectionValue } from '@forgeax/engine/app';
 import type {} from '@forgeax/engine/assets-runtime';
-import { placementCenter } from '../grid/grid.ts';
 import type {} from '../hotbar/hotbar.ts';
 import { isMechanicalItem } from '../items/items.ts';
 import { resolveSceneEntity } from '../shared/scene-refs.ts';
@@ -44,12 +43,6 @@ export const mechanicalRuntime: Plugin = {
       });
       yield () => unregisterRead?.();
 
-      const cameraPosition = (): readonly [number, number, number] | undefined => {
-        const result = world.get(camera, Transform);
-        if (!result.ok) return undefined;
-        return result.value.pos as unknown as readonly [number, number, number];
-      };
-
       const readoutStatus = (partId: number): ReadoutStatus => {
         if (state.isStalled(partId)) return 'stalled';
         if (state.omegaOf(partId) === 0) return 'idle';
@@ -88,20 +81,13 @@ export const mechanicalRuntime: Plugin = {
           const targetId = mechanical.selectedPartId() ?? mechanical.hoveredPartId();
           const targetPart = targetId === undefined ? undefined : parts.find((part) => part.id === targetId);
           if (targetPart === undefined) {
-            readout.update(undefined, undefined);
+            readout.update(undefined);
             return;
           }
-          const center = placementCenter(targetPart.placement);
-          readout.update(
-            {
-              x: center[0],
-              y: center[1] + targetPart.def.height,
-              z: center[2],
-              omega: state.omegaOf(targetPart.id),
-              status: readoutStatus(targetPart.id),
-            },
-            cameraPosition(),
-          );
+          readout.update({
+            omega: state.omegaOf(targetPart.id),
+            status: readoutStatus(targetPart.id),
+          });
         },
       }).unwrap();
 
