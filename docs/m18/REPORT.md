@@ -286,7 +286,21 @@
 
 ## 8. Git 基线、最终 HEAD、标签、工作区状态
 
-（提交后补齐：基线 `076eb20`、最终 HEAD、tag `m18-final`、`git status` clean。）
+| 项 | 值 |
+|:--|:--|
+| 安全基线 | `076eb20`（M1.7 正式验收后的最后一个提交，含 M1.8 调查文档） |
+| 基线 tag | `m17c-baseline` / `m17c-final`（M1.7 验收快照，未改动） |
+| 实施检查点 | 实施期间的 `autosave:` 提交（`179eb0e`、`b7537f2` 等），工作区在中途可回滚到任意一处 |
+| 最终 HEAD | `4176c0d` — `feat: M1.8 跨层机械与完整工业生产闭环` |
+| 最终 tag | `m18-final` |
+| 工作区 | `git status --short` 为空（clean） |
+| 历史产物 | 未覆盖、未删除：`artifacts/play/scripts/m17*/`、`playthrough/` 全部保留 |
+
+约束遵守情况：
+- 全程**没有**使用 `git reset --hard`，没有改写历史；中途所有改动都有 autosave 提交可追溯。
+- 提交**没有**使用 `--no-verify`；提交钩子（含 20 KB 单文件检查）原样通过。
+- 历史验收脚本 `scripts/m17a-playthrough.mjs` 只放宽了两处「套件恰好 5 种零件」的断言（M1.8 把套件扩到 11 种后的必要同步），
+  M1.7 的 5 个旧零件数量断言与全部操作流程断言未改动。
 
 ---
 
