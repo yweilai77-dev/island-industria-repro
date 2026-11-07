@@ -6,6 +6,10 @@
 export default async function playthrough(play) {
   let yawIndex = 1; // 初始相机 yaw = 45°（INITIAL_YAW_INDEX=1）
 
+  const assert = (condition, message) => {
+    if (!condition) throw new Error(message);
+  };
+
   const fps = async () => {
     const text = await play.page.evaluate(() => document.body.innerText);
     const match = text.match(/FPS ([0-9.]+)/);
@@ -26,26 +30,26 @@ export default async function playthrough(play) {
     await play.wait(100);
   };
 
-  const inventory = async (label) => {
+  const inventory = async (label, expectedTotal) => {
     await play.keyboard.press('Tab');
     await play.wait(450);
     const rows = await play.page.evaluate(() =>
       Array.from(document.querySelectorAll('.ii-row-count')).map((el) => el.textContent));
-    const detail = await play.page.evaluate(() =>
-      document.querySelector('.ii-detail-count')?.textContent ?? '');
     await play.screenshot('inventory-' + label);
     await play.keyboard.press('Tab');
     await play.wait(350);
-    console.log('INVENTORY ' + label + ': ' + JSON.stringify(rows) + ' ' + detail);
+    console.log('INVENTORY ' + label + ': ' + JSON.stringify(rows));
+    assert(rows.length === 1, 'inventory should show exactly one iron-ore stack, got ' + JSON.stringify(rows));
+    assert(rows[0] === 'x ' + expectedTotal, 'inventory total should be ' + expectedTotal + ', got ' + rows[0]);
     return rows;
   };
 
-  const harvest = async (label) => {
+  const harvest = async (label, expectedTotal) => {
     await play.screenshot('node-' + label + '-prompt');
     await play.keyboard.press('KeyF');
     await play.wait(3200);
     await play.screenshot('node-' + label + '-done');
-    return inventory(label);
+    return inventory(label, expectedTotal);
   };
 
   await play.step('01-start-and-fps', async () => {
@@ -57,7 +61,9 @@ export default async function playthrough(play) {
     await walk(32.0); // 初始 yaw 45°：-X/-Z，一路夹到西北角 (-15.5,-15.5)
     await walk(2.0); // 额外推，证明边界夹紧
     await play.screenshot('02-nw-edge');
-    console.log('FPS_EDGE=' + (await fps()));
+    const edgeFps = await fps();
+    console.log('FPS_EDGE=' + edgeFps);
+    assert(edgeFps >= 50, 'edge FPS should stay above 50, got ' + edgeFps);
   });
 
   await play.step('03-node-c', async () => {
@@ -66,7 +72,7 @@ export default async function playthrough(play) {
     await face(4); // +Z
     await walk(8.5);  // z = -7.0，进入 C(-13,-7)
     await play.screenshot('03-node-c');
-    await harvest('c');
+    await harvest('c', 1);
   });
 
   await play.step('04-node-d', async () => {
@@ -78,7 +84,7 @@ export default async function playthrough(play) {
     await face(0); // -Z
     await walk(5.0);
     await play.screenshot('04-node-d');
-    await harvest('d');
+    await harvest('d', 2);
   });
 
   await play.step('05-node-b', async () => {
@@ -87,7 +93,7 @@ export default async function playthrough(play) {
     await face(0); // -Z
     await walk(15.5); // z≈-5，进入 B(4,-5)
     await play.screenshot('05-node-b');
-    await harvest('b');
+    await harvest('b', 3);
   });
 
   await play.step('06-node-a', async () => {
@@ -96,7 +102,7 @@ export default async function playthrough(play) {
     await face(4); // +Z
     await walk(9.0); // z≈4，进入 A(-5,4)
     await play.screenshot('06-node-a');
-    await harvest('a');
+    await harvest('a', 4);
   });
 
   await play.step('07-stairs-platform', async () => {
@@ -155,7 +161,7 @@ export default async function playthrough(play) {
     await play.screenshot('16-corner-ghost-invalid');
     await play.mouse.click([0.52, 0.66]);
     await play.wait(250);
-    await play.screenshot('17-corner-invalid-click');
+    await play.screenshot('17b-corner-invalid-click');
     await play.keyboard.press('BracketLeft');
     // 边界夹紧：+Z、+X 两个方向再推
     await face(4);
@@ -169,9 +175,12 @@ export default async function playthrough(play) {
   await play.step('09-reload', async () => {
     const before = await fps();
     console.log('FPS_BEFORE_RELOAD=' + before);
+    assert(before >= 50, 'FPS before reload should stay above 50, got ' + before);
     await play.reload();
     await play.wait(800);
     await play.screenshot('19-after-reload');
-    console.log('FPS_AFTER_RELOAD=' + (await fps()));
+    const after = await fps();
+    console.log('FPS_AFTER_RELOAD=' + after);
+    assert(after >= 50, 'FPS after reload should stay above 50, got ' + after);
   });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { cellKey, cellsOf, type Cell } from '../grid/grid.ts';
 import { PLAYER_START_CELL } from '../player/player.ts';
 import { IRON_ORE_MAX_AMOUNT, IRON_ORE_NODES, nodePlacement } from '../resource/resource.ts';
+import { registerGroundSupport } from '../spatial/ground-support.ts';
 import { SupportRegistry } from '../spatial/support.ts';
 import {
   MAIN_STAIRS,
@@ -23,19 +24,10 @@ function insideLegacy20x20(cell: Cell): boolean {
     && cell.gz >= LEGACY_MIN && cell.gz <= LEGACY_MAX;
 }
 
-/** 与生产 spatial.pack.ts 相同的注册方式：地面格集合由 MapConfig 提供。 */
+/** 直接复用生产 spatial.pack.ts 的注册函数，避免测试复制一份注册逻辑。 */
 function registerMapGround(): SupportRegistry {
   const supports = new SupportRegistry();
-  supports.register({
-    id: 'support:ground',
-    level: 0,
-    worldY: 0,
-    cells: MAP_CONFIG.cells(),
-    kind: 'ground',
-    buildable: true,
-    walkable: true,
-    active: true,
-  });
+  registerGroundSupport(supports, MAP_CONFIG);
   return supports;
 }
 

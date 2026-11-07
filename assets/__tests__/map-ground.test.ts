@@ -1,26 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { cellKey, createPlacement } from '../grid/grid.ts';
-import { SpatialIndex } from '../spatial/occupancy.ts';
+import {
+  groundSupportSurface,
+  registerGroundSupport,
+} from '../spatial/ground-support.ts';
 import { SupportRegistry } from '../spatial/support.ts';
 import {
   EDGE_TRIM,
   MAP_CONFIG,
+  createMapConfig,
   edgeTrimBoxes,
 } from '../world/map-config.ts';
 
-/** 与生产 spatial.pack.ts 相同的注册方式：地面格集合由 MapConfig 提供。 */
+/** 直接复用生产 spatial.pack.ts 的注册函数，避免测试复制一份注册逻辑。 */
 function registerMapGround(): SupportRegistry {
   const supports = new SupportRegistry();
-  supports.register({
-    id: 'support:ground',
-    level: 0,
-    worldY: 0,
-    cells: MAP_CONFIG.cells(),
-    kind: 'ground',
-    buildable: true,
-    walkable: true,
-    active: true,
-  });
+  registerGroundSupport(supports, MAP_CONFIG);
   return supports;
 }
 
@@ -29,17 +24,19 @@ describe('ground SupportSurface from MAP_CONFIG.cells()', () => {
     const supports = registerMapGround();
     expect(supports.size).toBe(1);
 
-    const ground = supports.get('support:ground');
+    const ground = groundSupportSurface(MAP_CONFIG);
+    expect(supports.get(ground.id)).toEqual(ground);
+    expect(supports.get('support:ground')).toBeDefined();
     expect(ground).toBeDefined();
-    expect(ground?.cells).toHaveLength(1024);
-    expect(new Set(ground?.cells.map(cellKey)).size).toBe(1024);
+    expect(ground.cells).toHaveLength(1024);
+    expect(new Set(ground.cells.map(cellKey)).size).toBe(1024);
 
-    expect(ground?.level).toBe(0);
-    expect(ground?.worldY).toBe(0);
-    expect(ground?.kind).toBe('ground');
-    expect(ground?.buildable).toBe(true);
-    expect(ground?.walkable).toBe(true);
-    expect(ground?.active).toBe(true);
+    expect(ground.level).toBe(0);
+    expect(ground.worldY).toBe(0);
+    expect(ground.kind).toBe('ground');
+    expect(ground.buildable).toBe(true);
+    expect(ground.walkable).toBe(true);
+    expect(ground.active).toBe(true);
   });
 
   it('covers the four corners, four edge midpoints and the center', () => {
@@ -172,12 +169,24 @@ describe('edge trim boxes (visual only)', () => {
     expect(supports.supportsAtPoint(-16.1, 0)).toHaveLength(0);
     expect(supports.supportsAtPoint(16.1, 0)).toHaveLength(0);
 
-    // 生产里只有结构碰撞体进 SpatialIndex；包边没有被注册（空索引即可说明）
-    const spatial = new SpatialIndex();
-    expect(spatial.size).toBe(0);
+    // 说明：包边是否被生产场景/空间索引注册由代码审查与 project play 预览覆盖；
+    // 这里只验证包边描述本身不携带任何碰撞/支撑数据，且几何中心落在地面格之外。
     for (const box of boxes) {
-      expect(spatial.has(`structure:${box.id}`)).toBe(false);
-      expect(spatial.has(`structure:edge-trim:${box.id}`)).toBe(false);
+      expect(Object.keys(box).sort()).toEqual(['id', 'pos', 'size']);
+      expect(Object.isFrozen(box)).toBe(true);
     }
+  });
+
+  it('keeps rectangular trim flush with each map axis', () => {
+    const wide = createMapConfig({ id: 'wide-test', widthCells: 32, depthCells: 48 });
+    const boxes = edgeTrimBoxes(wide);
+    const byId = new Map(boxes.map((box) => [box.id, box]));
+    // X 向边长 = 32，Z 向边长 = 48；包边内侧仍贴在世界坐标边缘。
+    expect(byId.get('north')?.size[0]).toBeCloseTo(32.2, 12);
+    expect(byId.get('south')?.size[0]).toBeCloseTo(32.2, 12);
+    expect(byId.get('west')?.size[2]).toBeCloseTo(48.2, 12);
+    expect(byId.get('east')?.size[2]).toBeCloseTo(48.2, 12);
+    expect(byId.get('north')?.pos[2]).toBeCloseTo(-24.1, 12);
+    expect(byId.get('east')?.pos[0]).toBeCloseTo(16.1, 12);
   });
 });

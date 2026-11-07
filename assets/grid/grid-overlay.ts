@@ -19,8 +19,8 @@ export const GRID_LINE_COUNT_X = MAP_CONFIG.gridLineCountX;
 export const GRID_LINE_COUNT_Z = MAP_CONFIG.gridLineCountZ;
 /** 兼容旧名：旧调用方默认正方形地图。 */
 export const GRID_LINE_COUNT = GRID_LINE_COUNT_X;
-/** 网格线抬高量，避免与地面顶面 z-fighting。 */
-export const GRID_LINE_Y = 0.01;
+/** 网格线抬高量，避免与地面顶面 z-fighting；随 MapConfig 的地面高度移动。 */
+export const GRID_LINE_Y = MAP_CONFIG.groundTopY + 0.01;
 /** 高亮薄板中心高度（薄板高 0.02，顶面在 0.04）。 */
 export const HIGHLIGHT_CENTER_Y = 0.03;
 /** 高亮实体隐藏位置（引擎没有可见性组件，用移出视线代替）。 */
@@ -64,7 +64,7 @@ export function buildGridLinePositions(
 /** 射线（Float32Array[ox,oy,oz,dx,dy,dz]，方向已归一化）与水平面求交。 */
 export function intersectGroundPlane(
   ray: ArrayLike<number>,
-  planeY = 0,
+  planeY = MAP_CONFIG.groundTopY,
 ): { x: number; z: number } | undefined {
   const originY = ray[1] as number;
   const directionY = ray[4] as number;

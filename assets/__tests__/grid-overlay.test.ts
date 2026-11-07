@@ -29,6 +29,19 @@ describe('grid overlay geometry', () => {
     expect(max).toBe(16);
   });
 
+  it('spaces all grid lines exactly 1m apart from -16 to 16', () => {
+    const positions = buildGridLinePositions();
+    const xs = new Set<number>();
+    const zs = new Set<number>();
+    for (let index = 0; index < positions.length; index += 3) {
+      xs.add(positions[index] as number);
+      zs.add(positions[index + 2] as number);
+    }
+    const expected = Array.from({ length: 33 }, (_, index) => index - 16);
+    expect([...xs].sort((a, b) => a - b)).toEqual(expected);
+    expect([...zs].sort((a, b) => a - b)).toEqual(expected);
+  });
+
   it('derives line counts from half extents for rectangular maps', () => {
     // halfX=2 → 5 条平行 Z 的线；halfZ=3 → 7 条平行 X 的线 → 12 条线 / 72 float
     const positions = buildGridLinePositions(0.01, 2, 3);
