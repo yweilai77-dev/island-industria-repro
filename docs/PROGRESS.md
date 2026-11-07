@@ -85,7 +85,23 @@
 - 机器运动学：`artifacts/play/scripts/m17b-playthrough/`
 - 原始探针与临时截图：`E:\DeepseekHarness\.zaohua-tmp\`
 
-## 7. 风险与待确认
+## 7. M1.8 调查产出（2026-11-07）
+
+- [SAVE-ARCHITECTURE.md](design/SAVE-ARCHITECTURE.md)：状态清单、快照格式 v1、加载顺序、
+  存储通道（前端 `zaohua-platform-sdk.storage` + 现有 MessagePort）。**结论：能做，但建筑/
+  机械/资源/玩家 4 个系统缺快照/恢复接口，必须首条生产链动工前补完（P0）。**
+- [ART-DIRECTION.md](design/ART-DIRECTION.md)：三个候选方向，推荐 **A 低多边形海岛 + 暖色工业**；
+  引擎已具备贴图/天空 HDR+IBL/后处理/VFX 能力，音频插件尚未接入。
+- [UI-SPEC.md](design/UI-SPEC.md)：盘点现有 DOM/3D 两套界面，定义颜色/字体/间距 token 与组件规则；
+  最大问题是**建造菜单缺失**（`[`/`]` 盲切），其次是键位说明与错误 Toast。
+- [PERFORMANCE-BUDGET.md](design/PERFORMANCE-BUDGET.md)：当前 60 FPS / <100 实体；给出 S/M/L/XL
+  四档工厂预算与优化顺序；最大风险是 3D 读数用 Box 实体拼装。
+- [DEMO-CHECKLIST.md](DEMO-CHECKLIST.md)：L2/L3/L4 逐项验收清单 + 5–10 分钟演示脚本草案 +
+  体验门记录模板。
+
+调查没有改动任何游戏代码，`pnpm test` / `typecheck` / `project check` 状态不变。
+
+## 8. 风险与待确认
 
 - **存档**：机械网络、建筑、库存、生产四套状态目前全在内存；这是 M2 返工风险最高项，
   必须在生产系统完成前定架构（Roadmap §5 已提前到 M1.8）。
