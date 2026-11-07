@@ -1,4 +1,5 @@
 import { createBoxGeometry } from '@forgeax/engine/geometry';
+import { quat } from '@forgeax/engine/math';
 import { Materials, MeshFilter, MeshRenderer } from '@forgeax/engine/render';
 import { ChildOf, Transform } from '@forgeax/engine/scene';
 import type { EntityHandle } from '@forgeax/engine/ecs';
@@ -16,12 +17,13 @@ import { SEGMENT_RECTS, digitSegments } from '../hud/hud.ts';
  */
 
 const HIDDEN_Y = -1000;
-const DIGIT_SCALE = 0.28;
-const DIGIT_SPACING = 0.2;
+const DIGIT_SCALE = 0.34;
+const DIGIT_SPACING = 0.24;
 /** 读数牌相对零件顶部的高度偏移。 */
-const LIFT = 0.62;
+const LIFT = 0.78;
 const PANEL_Z = -0.01;
 const SEGMENT_Z = 0.02;
+const UP: readonly [number, number, number] = [0, 1, 0];
 
 export type ReadoutStatus = 'running' | 'slowed' | 'stalled' | 'idle';
 
@@ -140,15 +142,24 @@ export function createMechanicalReadout(
         return;
       }
       visible = true;
-      const yaw = cameraPosition
-        ? Math.atan2(cameraPosition[0] - target.x, cameraPosition[2] - target.z)
-        : 0;
-      const half = yaw / 2;
+      // 完整朝向：眼睛放在相机上、看向零件位置，再把牌面翻到朝相机一侧，
+      // 这样读数牌会同时跟随水平方位和俯仰角，顶视相机下也不会被压扁。
+      const position: [number, number, number] = [target.x, target.y + LIFT, target.z];
+      const look = cameraPosition
+        ? quat.fromLookAt(
+          quat.create(),
+          cameraPosition as unknown as readonly [number, number, number],
+          position,
+          UP,
+        )
+        : quat.create();
+      const flip = quat.fromAxisAngle(quat.create(), [0, 1, 0], Math.PI);
+      const oriented = quat.multiply(quat.create(), look, flip);
       world
         .set(panelRoot, Transform, {
-          pos: [target.x, target.y + LIFT, target.z],
+          pos: position,
           scale: [1, 1, 1],
-          quat: [0, Math.sin(half), 0, Math.cos(half)],
+          quat: [oriented[0] ?? 0, oriented[1] ?? 0, oriented[2] ?? 0, oriented[3] ?? 1],
         })
         .unwrap();
       renderValue(Math.abs(target.omega) * 60 / (Math.PI * 2));
