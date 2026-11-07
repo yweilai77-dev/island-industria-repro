@@ -7,7 +7,9 @@ import type { MechanicalPart } from './parts.ts';
  * 边界（已确认）：
  * - 动力沿 axial 与 gearMesh 连接传播；机器是终端，不穿过机器继续传播；
  * - 单动力源；组件内多源仍是 unsupported/multiple-sources；
- * - 稳态扭矩模型：无惯量、无摩擦、无动态负载；
+ * - 只支持树状动力网络：任何闭环（无论传动比是否自洽）都标记
+ *   unsupported/cyclic-network；闭环检测发生在负载解算之前，绝不挑一条 BFS 路径继续供能；
+ * - 极简扭矩模型：无惯量、无摩擦、无动态负载；
  * - 速度下垂：ω = 额定 × (1 − 源侧需求 / 源容量)，源侧需求 ≥ 容量则整网过载停止；
  * - 局部支路：轴/齿轮上通过的扭矩超过其 maxTorque，只停这条支路的下游。
  */
@@ -16,7 +18,7 @@ export type NetworkStatus = 'idle' | 'powered' | 'unsupported' | 'stalled';
 export type NetworkReason =
   | 'no-source'
   | 'multiple-sources'
-  | 'kinematic-conflict'
+  | 'cyclic-network'
   | 'source-overload'
   | 'branch-overload';
 
@@ -182,8 +184,8 @@ interface DriveTree {
   readonly order: readonly number[];
   readonly children: ReadonlyMap<number, readonly { child: number; ratio: number }[]>;
   readonly relativeOmega: ReadonlyMap<number, number>;
-  /** 闭环传动比自相矛盾时为 true。 */
-  readonly conflict: boolean;
+  /** 图里存在非树边（闭环）时为 true；闭环一律整组件拒绝，不做扭矩分配。 */
+  readonly cyclic: boolean;
 }
 
 function buildDriveTree(
@@ -196,7 +198,7 @@ function buildDriveTree(
   const relativeOmega = new Map<number, number>([[sourceId, 1]]);
   const queue: number[] = [sourceId];
   let head = 0;
-  let conflict = false;
+  let cyclic = false;
 
   while (head < queue.length) {
     const current = queue[head] as number;
@@ -209,13 +211,12 @@ function buildDriveTree(
     const currentOmega = relativeOmega.get(current) ?? 0;
     for (const edge of topology.driveAdjacency.get(current) ?? []) {
       if (!partMap.has(edge.neighbor)) continue;
-      const implied = currentOmega * edge.ratio;
-      const seen = relativeOmega.get(edge.neighbor);
-      if (seen !== undefined) {
-        const tolerance = Math.max(1e-6, Math.abs(implied) * 1e-6);
-        if (Math.abs(seen - implied) > tolerance) conflict = true;
+      if (relativeOmega.has(edge.neighbor)) {
+        // 非树边 = 闭环。即使传动比自洽也不解算扭矩：并联路径的负载分配尚未建模。
+        cyclic = true;
         continue;
       }
+      const implied = currentOmega * edge.ratio;
       relativeOmega.set(edge.neighbor, implied);
       const list = children.get(current);
       if (list) list.push({ child: edge.neighbor, ratio: edge.ratio });
@@ -224,7 +225,7 @@ function buildDriveTree(
     }
   }
 
-  return { order, children, relativeOmega, conflict };
+  return { order, children, relativeOmega, cyclic };
 }
 
 /**
@@ -269,8 +270,9 @@ export function solvePower(
     }
 
     const tree = buildDriveTree(topology, partMap, sourceId);
-    if (tree.conflict) {
-      components.push(withStatus(component, 'unsupported', 'kinematic-conflict'));
+    if (tree.cyclic) {
+      // 闭环：在任何扭矩聚合之前拒绝，避免用一条 BFS 路径伪造并联负载分配。
+      components.push(withStatus(component, 'unsupported', 'cyclic-network'));
       continue;
     }
 

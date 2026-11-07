@@ -9,7 +9,8 @@ import { isMechanicalItem } from '../items/items.ts';
 import { resolveSceneEntity } from '../shared/scene-refs.ts';
 import { applyMachinePose, applySpin } from './animation.ts';
 import type { MechanicalService } from './mechanical.pack.ts';
-import { createMechanicalReadout, type ReadoutStatus } from './readout.ts';
+import { createMechanicalReadout } from './readout.ts';
+import { readoutTargetOf, type ReadoutTarget } from './readout-status.ts';
 import { MechanicalRuntimeState, sourceToggleTarget } from './runtime-state.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
@@ -43,12 +44,18 @@ export const mechanicalRuntime: Plugin = {
       });
       yield () => unregisterRead?.();
 
-      const readoutStatus = (partId: number): ReadoutStatus => {
-        if (state.isStalled(partId)) return 'stalled';
-        if (state.omegaOf(partId) === 0) return 'idle';
-        // 转速因子 ≥ 0.75 视为正常运转（绿），被负载明显拖慢时转琥珀。
-        return state.speedFactorOf(partId) >= 0.75 ? 'running' : 'slowed';
-      };
+      /**
+       * 读数完全来自 Runtime 解算结果：状态、rpm、扭矩都不在显示层重算。
+       * 无解算数据的零件（不支持/闭环）返回 null，读数显示 —。
+       */
+      const readoutFor = (partId: number, capacity: number): ReadoutTarget => readoutTargetOf({
+        component: state.componentOf(partId),
+        stalled: state.isStalled(partId),
+        omega: state.omegaOf(partId),
+        torque: state.torqueOf(partId),
+        capacity,
+        speedFactor: state.speedFactorOf(partId),
+      });
 
       world.addSystem(Update, {
         name: SYSTEM_NAME,
@@ -85,10 +92,7 @@ export const mechanicalRuntime: Plugin = {
             readout.update(undefined);
             return;
           }
-          readout.update({
-            omega: state.omegaOf(targetPart.id),
-            status: readoutStatus(targetPart.id),
-          });
+          readout.update(readoutFor(targetPart.id, targetPart.def.maxTorque));
         },
       }).unwrap();
 
