@@ -4,6 +4,15 @@ AI-first TypeScript game on `@forgeax/engine`. Hard rules and routing here;
 open a reference only when its task applies. Never read whole large `SKILL.md` files;
 stop after their short start section unless the task needs more.
 
+## 项目状态与路线（动手前先读）
+
+- [docs/ROADMAP.md](docs/ROADMAP.md)：Roadmap v1.1（候选）。第一交付物是**比赛级可玩 Demo**，
+  不是无限扩张的工业系统；M1 核心玩法 → M2 体验完整度 → M3/M4 扩展 → M5 比赛交付；
+  完成度分 L1 技术可用 / L2 玩法成立 / L3 游戏完整 / L4 比赛交付。
+- [docs/PROGRESS.md](docs/PROGRESS.md)：当前进度快照与实测证据（每次阶段结束更新）。
+- 验收规则：技术门（check/test/typecheck/build/playthrough）全绿**不等于**阶段完成；
+  必须再走一遍体验门（不看代码完整玩一段 + 按八维打分）。这是 M1 的核心教训。
+
 ## Start here
 
 1. Imports and signatures: [the API index](skills/forgeax-engine-sdk/references/api-index.md) before searching `node_modules`.
