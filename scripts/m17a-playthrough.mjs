@@ -79,6 +79,7 @@ export default async function playthrough(play) {
   });
 
   await play.step('04-invalid-placement', async () => {
+    const before = await readCounts();
     await play.keyboard.press('Digit1');
     await play.wait(200);
     // 瞄准已占用的 source 格 → 红色非法幽灵；点击不得扣库存。
@@ -90,7 +91,8 @@ export default async function playthrough(play) {
     await play.screenshot('04-invalid-click');
     const counts = await readCounts();
     console.log('AFTER_INVALID=' + JSON.stringify(counts));
-    assert(counts[0] === 23, 'invalid placement must not consume inventory: ' + JSON.stringify(counts));
+    assert(counts.reduce((sum, value) => sum + value, 0) === before.reduce((sum, value) => sum + value, 0),
+      'invalid placement must not consume inventory: ' + JSON.stringify({ before, counts }));
   });
 
   await play.step('05-player-blocked-by-shaft', async () => {
