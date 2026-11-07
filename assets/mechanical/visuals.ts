@@ -34,6 +34,7 @@ export interface MechanicalViewAssets {
   readonly accentMaterial: AssetHandle<'material'>;
   readonly ghostValidMaterial: AssetHandle<'material'>;
   readonly ghostInvalidMaterial: AssetHandle<'material'>;
+  readonly selectionMaterial: AssetHandle<'material'>;
   readonly jointMaterial: AssetHandle<'material'>;
 }
 
@@ -70,6 +71,7 @@ export function createMechanicalViewAssets(assets: AssetRegistry): MechanicalVie
     accentMaterial: assets.create(Materials.unlit([0.9, 0.55, 0.16, 1])).unwrap(),
     ghostValidMaterial: assets.create(overlayMaterial([0.3, 0.9, 0.45, 0.35])).unwrap(),
     ghostInvalidMaterial: assets.create(overlayMaterial([0.95, 0.25, 0.2, 0.35])).unwrap(),
+    selectionMaterial: assets.create(overlayMaterial([0.3, 0.85, 1, 0.32])).unwrap(),
     jointMaterial: assets.create(Materials.unlit([0.3, 0.9, 0.45, 1])).unwrap(),
   };
 }
@@ -79,7 +81,7 @@ export function releaseMechanicalViewAssets(assets: AssetRegistry, view: Mechani
     view.shaftMesh, view.keywayMesh, view.gearDiscMesh, view.toothMesh,
     view.bodyMesh, view.wheelMesh, view.ghostMesh, view.jointMesh,
     view.shaftMaterial, view.gearMaterial, view.bodyMaterial, view.accentMaterial,
-    view.ghostValidMaterial, view.ghostInvalidMaterial, view.jointMaterial,
+    view.ghostValidMaterial, view.ghostInvalidMaterial, view.selectionMaterial, view.jointMaterial,
   ]) {
     assets.release(handle).unwrap();
   }
@@ -230,4 +232,3 @@ export class PartViewRegistry {
     return this.views.size;
   }
 }
-

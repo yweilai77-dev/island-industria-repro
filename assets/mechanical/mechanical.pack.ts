@@ -97,6 +97,7 @@ export const mechanicalSystem: Plugin = {
       const registry = new MechanicalRegistry();
       const validGhost = spawnGhost(world, viewAssets.ghostMesh, viewAssets.ghostValidMaterial);
       const invalidGhost = spawnGhost(world, viewAssets.ghostMesh, viewAssets.ghostInvalidMaterial);
+      const selection = spawnGhost(world, viewAssets.ghostMesh, viewAssets.selectionMaterial);
       let rotation: Rotation = 0;
       let selectedPartId: number | undefined;
 
@@ -105,6 +106,7 @@ export const mechanicalSystem: Plugin = {
       };
       hideGhost(validGhost);
       hideGhost(invalidGhost);
+      hideGhost(selection);
 
       const grantKit = (): void => {
         if (world.hasResource(KIT_GRANTED_KEY)) return;
@@ -256,6 +258,19 @@ export const mechanicalSystem: Plugin = {
         }
       };
 
+      const showSelection = (part: MechanicalPart | undefined): void => {
+        if (!part) {
+          hideGhost(selection);
+          return;
+        }
+        const center = placementCenter(part.placement);
+        world.set(selection, Transform, {
+          pos: [center[0], levelBaseY(part.placement.level) + part.def.height / 2 - 0.02, center[2]],
+          scale: [part.def.w + 0.06, part.def.height + 0.06, part.def.d + 0.06],
+          quat: [0, Math.sin((part.placement.rotation * DEG) / 2), 0, Math.cos((part.placement.rotation * DEG) / 2)],
+        }).unwrap();
+      };
+
       const setGhost = (definition: MechanicalPartDef | undefined, placement: Placement | undefined, valid: boolean): void => {
         hideGhost(validGhost);
         hideGhost(invalidGhost);
@@ -309,6 +324,7 @@ export const mechanicalSystem: Plugin = {
             if (selectedPartId !== undefined) remove(selectedPartId);
             return;
           }
+          showSelection(selectedPartId === undefined ? undefined : registry.get(selectedPartId));
 
           const level = currentLevel();
           const ray = rayFromMouse(input);
@@ -336,8 +352,10 @@ export const mechanicalSystem: Plugin = {
         world.removeSystem(Update, SYSTEM_NAME).unwrap();
         hideGhost(validGhost);
         hideGhost(invalidGhost);
+        hideGhost(selection);
         world.despawn(validGhost);
         world.despawn(invalidGhost);
+        world.despawn(selection);
         views.disposeAll();
         for (const part of registry.all()) spatial.structures.unregister(structureIdForPart(part.id));
         registry.clear();
