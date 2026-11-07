@@ -126,6 +126,8 @@ export default async function playthrough(play) {
     // 删除平台建筑（X），验证 M1.5 拆除回归
     await play.keyboard.press('KeyX');
     await play.wait(300);
+    await play.mouse.move([0.05, 0.05]);
+    await play.wait(250);
     await play.screenshot('11b-platform-demolished');
     // 下楼：沿 -X 回到楼梯并下到地面
     await face(2); // -X
@@ -148,10 +150,10 @@ export default async function playthrough(play) {
     await play.screenshot('15-corner-placed');
     // 2×2 在边缘 → footprint 越界，红色非法幽灵（避开已放置格）
     await play.keyboard.press('BracketRight');
-    await play.mouse.move([0.48, 0.58]);
+    await play.mouse.move([0.5, 0.55]);
     await play.wait(250);
     await play.screenshot('16-corner-ghost-invalid');
-    await play.mouse.click([0.48, 0.58]);
+    await play.mouse.click([0.5, 0.55]);
     await play.wait(250);
     await play.screenshot('17-corner-invalid-click');
     await play.keyboard.press('BracketLeft');
