@@ -482,7 +482,7 @@ export default definePack({
       },
       'plugin/mechanical-runtime': {
         kind: 'plugin',
-        module: { specifier: './runtime.pack.ts', export: 'mechanicalRuntime' },
+        module: { specifier: './runtime.ts', export: 'mechanicalRuntime' },
       },
     }),
 });

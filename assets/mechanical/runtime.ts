@@ -20,7 +20,7 @@ const SYSTEM_NAME = 'island-industria/mechanical-runtime';
  */
 export const mechanicalRuntime: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'mechanical', 'hotbar'],
+  inject: ['world', 'mechanical', 'hotbar', 'gameHost'],
   apply(ctx) {
     const world = ctx.world;
     const mechanical = ctx.mechanical;
