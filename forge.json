@@ -1,0 +1,12 @@
+{
+  "id": "island-industria",
+  "name": "ISLAND INDUSTRIA",
+  "schemaVersion": "3.0.0",
+  "assetLibraries": [
+    "@forgeax/engine/content"
+  ],
+  "roots": {
+    "engine": "0c5bf4c1-bbd0-58e6-8ac9-1347fd716b81",
+    "frontend": "a09bb41c-528b-5596-bc06-95d0ebeee3ba"
+  }
+}

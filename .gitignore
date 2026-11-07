@@ -1,0 +1,19 @@
+dist/
+node_modules/
+.forgeax/
+.assetlib/
+artifacts/
+.game-builder/state/
+.game-builder/covers/
+.game-builder/artifacts/
+.game-builder/reference/
+
+# 助手工具目录：里面是指向工程 skills/ 的 junction，Git 无法正确版本化
+.agents/
+.claude/
+.cursor/
+.codebuddy/
+.workbuddy/
+
+# 打包产物
+release/

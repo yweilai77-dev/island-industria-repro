@@ -1,0 +1,53 @@
+{
+  "name": "@local/island-industria",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "packageManager": "pnpm@12.15.0",
+  "scripts": {
+    "dev": "forgeax dev start",
+    "build": "forgeax project build --json",
+    "package": "forgeax project package",
+    "serve": "forgeax project preview",
+    "preview": "forgeax project preview",
+    "doctor": "forgeax project check",
+    "test": "forgeax project test",
+    "typecheck": "pnpm exec tsc --noEmit"
+  },
+  "forgeax": {
+    "metrics": {
+      "bundle-size": {
+        "enabled": false,
+        "reason": "模板构建由 SDK 验证器负责"
+      },
+      "fps": {
+        "enabled": false,
+        "reason": "模板没有独立基准工作负载"
+      },
+      "bench": {
+        "enabled": false,
+        "reason": "模板基线由 Engine 应用负责"
+      },
+      "gate": {
+        "enabled": false,
+        "reason": "浏览器验收由 SDK 验证器负责"
+      },
+      "spike-report": {
+        "enabled": false,
+        "reason": "模板不是 spike 应用"
+      }
+    }
+  },
+  "dependencies": {
+    "@forgeax/engine": "0.4.19",
+    "zaohua-platform-sdk": "file:./vendor/zaohua-platform-sdk"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.40",
+    "@webgpu/types": "0.1.71",
+    "tsx": "4.23.1",
+    "typescript": "6.0.3",
+    "vitest": "4.1.12"
+  }
+}
