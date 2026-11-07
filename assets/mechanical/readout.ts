@@ -25,19 +25,19 @@ import {
 
 const HIDDEN_POS: readonly [number, number, number] = [0, -1000, 0];
 /** 面板锚点（相机局部坐标）：右上区域，避开左上资源计数与底部快捷栏。 */
-const PANEL_ANCHOR: readonly [number, number, number] = [-0.62, 0.24, -0.95];
-const DIGIT_SCALE = 0.075;
-const DIGIT_STEP = 0.055;
-const UNIT_CELL = 0.015;
-const STATUS_CELL = 0.012;
-const ROW_STEP = 0.085;
+const PANEL_ANCHOR: readonly [number, number, number] = [-0.30, 0.30, -0.95];
+const DIGIT_SCALE = 0.06;
+const DIGIT_STEP = 0.045;
+const UNIT_CELL = 0.012;
+const STATUS_CELL = 0.010;
+const ROW_STEP = 0.075;
 const SEGMENT_Z = 0.02;
 
 const NUM_X: readonly [number, number, number] = [0, DIGIT_STEP, DIGIT_STEP * 2];
-const SLASH_X = 0.17;
-const CAPACITY_X: readonly [number, number, number] = [0.23, 0.23 + DIGIT_STEP, 0.23 + DIGIT_STEP * 2];
-const UNIT_RPM_X = 0.2;
-const UNIT_TORQUE_X = 0.4;
+const SLASH_X = 0.135;
+const CAPACITY_X: readonly [number, number, number] = [0.19, 0.19 + DIGIT_STEP, 0.19 + DIGIT_STEP * 2];
+const UNIT_RPM_X = 0.16;
+const UNIT_TORQUE_X = 0.33;
 const STATUS_Y = -ROW_STEP * 2;
 
 /** 5×5 点阵字模，只收录读数会用到的字符。 */

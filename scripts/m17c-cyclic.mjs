@@ -55,8 +55,9 @@ export default async function playthrough(play) {
     await place('Digit1', [0.272, 0.665], '01-shaft-b');
     await place('Digit2', [0.298, 0.716], '01-gear-12t-a');
     await place('Digit3', [0.325, 0.772], '01-gear-24t-b');
-    await place('Digit2', [0.283, 0.830], '01-gear-12t-c');
+    // 先放远侧 (-3,8)，再放 (-2,8)：反过来射线会先命中已放的齿轮而进入选择模式。
     await place('Digit3', [0.255, 0.772], '01-gear-24t-d');
+    await place('Digit2', [0.283, 0.830], '01-gear-12t-c');
     await play.keyboard.press('Digit1');
     await clearHover();
     const s = await read('LOOP_BUILT');
@@ -74,8 +75,10 @@ export default async function playthrough(play) {
     assert(s.networks[0]?.reason === 'cyclic-network',
       'reason must be cyclic-network, got ' + s.networks[0]?.reason);
     // 不解算：没有任何零件获得 ω 或扭矩，不会输出看似有效的分配结果。
-    assert(s.powered === 0, 'no part may be powered in a cyclic network, got ' + s.powered);
-    assert(s.withTorque === 0, 'no part may report torque in a cyclic network, got ' + s.withTorque);
+    const poweredCount = s.parts.filter((part) => part.powered).length;
+    const torqueCount = s.parts.filter((part) => part.torque > 0).length;
+    assert(poweredCount === 0, 'no part may be powered in a cyclic network, got ' + poweredCount);
+    assert(torqueCount === 0, 'no part may report torque in a cyclic network, got ' + torqueCount);
     // 悬停一个齿轮：读数应显示 CYCLIC UNSUPPORTED 且数值为 —。
     await play.mouse.move([0.298, 0.68]);
     await play.wait(350);

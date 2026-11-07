@@ -238,6 +238,17 @@ describe('M1.7-C cyclic networks', () => {
     expect(solution.components[0]?.reason).toBe('cyclic-network');
   });
 
+  it('keeps a cyclic component unsupported even when the source is off', () => {
+    const { parts, connections } = consistentLoop();
+    const topology = buildPowerTopology(parts, connections, 1);
+    expect(topology.components[0]?.status).toBe('unsupported');
+    expect(topology.components[0]?.reason).toBe('cyclic-network');
+    const solution = solvePower(topology, parts, new Set());
+    expect(solution.components[0]?.status).toBe('unsupported');
+    expect(solution.components[0]?.reason).toBe('cyclic-network');
+    expect(solution.omegaByPart.size).toBe(0);
+  });
+
   it('gives the machines of a cyclic component no power and no torque split', () => {
     const { parts, connections } = consistentLoop();
     const solution = solve(parts, connections);

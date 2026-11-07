@@ -91,8 +91,39 @@ function isTransmission(part: MechanicalPart | undefined): boolean {
 }
 
 /**
+ * 结构层闭环检测：组件内沿 adjacency 做 BFS，遇到非树边即存在环。
+ * 只看结构（含机器边），与动力源开关无关。
+ */
+function componentHasCycle(
+  partIds: readonly number[],
+  adjacency: ReadonlyMap<number, readonly DriveNeighbor[]>,
+): boolean {
+  const visited = new Set<number>();
+  const parentEdge = new Map<number, string>();
+  for (const start of partIds) {
+    if (visited.has(start)) continue;
+    visited.add(start);
+    const queue = [start];
+    let head = 0;
+    while (head < queue.length) {
+      const current = queue[head] as number;
+      head += 1;
+      for (const edge of adjacency.get(current) ?? []) {
+        if (parentEdge.get(current) === edge.id) continue;
+        if (visited.has(edge.neighbor)) return true;
+        visited.add(edge.neighbor);
+        parentEdge.set(edge.neighbor, edge.id);
+        queue.push(edge.neighbor);
+      }
+    }
+  }
+  return false;
+}
+
+/**
  * 从 parts + connections 构建一次拓扑。只在 mechanical.revision 变化时调用。
- * 组件按 axial | gearMesh 边连通；多源组件保持 unsupported。
+ * 组件按 axial | gearMesh 边连通；闭环组件在结构层直接标记 unsupported/cyclic-network，
+ * 多源组件保持 unsupported/multiple-sources。
  */
 export function buildPowerTopology(
   parts: readonly MechanicalPart[],
@@ -150,7 +181,10 @@ export function buildPowerTopology(
     }
     let status: NetworkStatus;
     let reason: NetworkReason | null = null;
-    if (sourceIds.length === 0) {
+    if (componentHasCycle(partIds, adjacency)) {
+      status = 'unsupported';
+      reason = 'cyclic-network';
+    } else if (sourceIds.length === 0) {
       status = 'idle';
       reason = 'no-source';
     } else if (sourceIds.length > 1) {
