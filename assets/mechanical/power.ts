@@ -26,6 +26,8 @@ export interface DriveNeighbor {
   readonly neighbor: number;
   /** ω_neighbor / ω_current。 */
   readonly ratio: number;
+  /** 连接 ID；用于区分"回到父节点的树边"和真正的非树边（闭环）。 */
+  readonly id: string;
 }
 
 /** 旧名，保留给已有导入。 */
@@ -107,8 +109,8 @@ export function buildPowerTopology(
     if (!partMap.has(connection.aPartId) || !partMap.has(connection.bPartId)) continue;
     const ratio = connection.ratio;
     if (!Number.isFinite(ratio) || ratio === 0) continue;
-    adjacency.get(connection.aPartId)!.push({ neighbor: connection.bPartId, ratio });
-    adjacency.get(connection.bPartId)!.push({ neighbor: connection.aPartId, ratio: 1 / ratio });
+    adjacency.get(connection.aPartId)!.push({ neighbor: connection.bPartId, ratio, id: connection.id });
+    adjacency.get(connection.bPartId)!.push({ neighbor: connection.aPartId, ratio: 1 / ratio, id: connection.id });
   }
 
   const visited = new Set<number>();
@@ -196,6 +198,8 @@ function buildDriveTree(
   const order: number[] = [];
   const children = new Map<number, { child: number; ratio: number }[]>();
   const relativeOmega = new Map<number, number>([[sourceId, 1]]);
+  /** 每个节点把自己接入树的边 ID（用于跳过"回到父节点"的树边）。 */
+  const parentEdge = new Map<number, string>();
   const queue: number[] = [sourceId];
   let head = 0;
   let cyclic = false;
@@ -211,11 +215,14 @@ function buildDriveTree(
     const currentOmega = relativeOmega.get(current) ?? 0;
     for (const edge of topology.driveAdjacency.get(current) ?? []) {
       if (!partMap.has(edge.neighbor)) continue;
+      // 回到父节点的同一条连接是树边，不是闭环。
+      if (parentEdge.get(current) === edge.id) continue;
       if (relativeOmega.has(edge.neighbor)) {
         // 非树边 = 闭环。即使传动比自洽也不解算扭矩：并联路径的负载分配尚未建模。
         cyclic = true;
         continue;
       }
+      parentEdge.set(edge.neighbor, edge.id);
       const implied = currentOmega * edge.ratio;
       relativeOmega.set(edge.neighbor, implied);
       const list = children.get(current);
@@ -283,6 +290,8 @@ export function solvePower(
     const stalled = new Set<number>();
     const stallTorque = new Map<number, number>();
     let overload: NetworkReason | null = null;
+    /** 触发整网过载时的源侧需求；停转后不能再拿清零后的需求上报。 */
+    let overloadDemand: number | null = null;
 
     // 子节点深度一定大于父节点，所以逆 BFS 序就是合法后序。
     const computeDemand = (): Map<number, number> => {
@@ -321,6 +330,7 @@ export function solvePower(
       if (capacity > 0 ? sourceDemand >= capacity : sourceDemand > 0) {
         // 总负载压到动力源上限：整个网络停止。
         overload = 'source-overload';
+        overloadDemand = sourceDemand;
         stallSubtree(sourceId, demand);
         demand = computeDemand();
         break;
@@ -342,7 +352,9 @@ export function solvePower(
       stallSubtree(offender, demand);
     }
 
-    const sourceDemand = demand.get(sourceId) ?? 0;
+    const sourceDemand = overload === 'source-overload'
+      ? (overloadDemand ?? 0)
+      : (demand.get(sourceId) ?? 0);
     const factor = overload === 'source-overload'
       ? 0
       : capacity > 0

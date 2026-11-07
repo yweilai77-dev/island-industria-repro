@@ -11,6 +11,7 @@ import {
 import type { Connection } from '../mechanical/ports.ts';
 import { buildPowerTopology, solvePower } from '../mechanical/power.ts';
 import { MechanicalRuntimeState } from '../mechanical/runtime-state.ts';
+import { readoutTargetOf } from '../mechanical/readout-status.ts';
 
 /**
  * M1.7-C 齿轮传动 + 负载/过载模型纯逻辑测试。
@@ -190,39 +191,39 @@ describe('M1.7-C load and overload', () => {
   });
 });
 
+function consistentLoop(): { parts: MechanicalPart[]; connections: Connection[] } {
+  return {
+    parts: [
+      part(1, 'power_source'), part(2, 'shaft'), part(3, 'gear_12'), part(4, 'gear_24'), part(5, 'machine'),
+    ],
+    connections: [
+      edge(1, 2, 1),
+      edge(2, 3, 1),
+      edge(3, 4, -0.5, 'gearMesh'),
+      edge(4, 3, -2, 'gearMesh'),
+      edge(3, 5, 1),
+    ],
+  };
+}
+
+function contradictoryLoop(): { parts: MechanicalPart[]; connections: Connection[] } {
+  return {
+    parts: [
+      part(1, 'power_source'), part(2, 'shaft'),
+      part(3, 'gear_12'), part(4, 'gear_24'), part(5, 'gear_12'), part(6, 'machine'),
+    ],
+    connections: [
+      edge(1, 2, 1), edge(2, 3, 1),
+      edge(3, 4, -0.5, 'gearMesh'),
+      edge(4, 5, -2, 'gearMesh'),
+      edge(5, 3, -1, 'gearMesh'),
+      edge(3, 6, 1),
+    ],
+  };
+}
+
 describe('M1.7-C cyclic networks', () => {
   /** 源 + 轴 + 两个齿轮互啮两次（-0.5 与 -2 连乘 = 1，传动比自洽的闭环）+ 一台机器。 */
-  function consistentLoop(): { parts: MechanicalPart[]; connections: Connection[] } {
-    return {
-      parts: [
-        part(1, 'power_source'), part(2, 'shaft'), part(3, 'gear_12'), part(4, 'gear_24'), part(5, 'machine'),
-      ],
-      connections: [
-        edge(1, 2, 1),
-        edge(2, 3, 1),
-        edge(3, 4, -0.5, 'gearMesh'),
-        edge(4, 3, -2, 'gearMesh'),
-        edge(3, 5, 1),
-      ],
-    };
-  }
-
-  function contradictoryLoop(): { parts: MechanicalPart[]; connections: Connection[] } {
-    return {
-      parts: [
-        part(1, 'power_source'), part(2, 'shaft'),
-        part(3, 'gear_12'), part(4, 'gear_24'), part(5, 'gear_12'), part(6, 'machine'),
-      ],
-      connections: [
-        edge(1, 2, 1), edge(2, 3, 1),
-        edge(3, 4, -0.5, 'gearMesh'),
-        edge(4, 5, -2, 'gearMesh'),
-        edge(5, 3, -1, 'gearMesh'),
-        edge(3, 6, 1),
-      ],
-    };
-  }
-
   it('rejects a closed loop even when its ratios are consistent', () => {
     const { parts, connections } = consistentLoop();
     const solution = solve(parts, connections);
