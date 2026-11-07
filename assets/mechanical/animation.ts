@@ -7,6 +7,7 @@ import { DEFAULT_MACHINE_GEOMETRY, type MachinePose } from './machine.ts';
 import type { PartView } from './visuals.ts';
 
 const DEG = Math.PI / 180;
+const IDENTITY_QUAT: readonly [number, number, number, number] = [0, 0, 0, 1];
 
 /** 世界有向轴 → 零件 root 本地自转轴。root 只有 yaw；B 阶段所有零件本地轴为 X。 */
 function localSpinAxis(part: MechanicalPart): [number, number, number] {
@@ -49,11 +50,28 @@ function setPose(
 
 /** 轴/齿轮/源轮/机器输入轮的自转；使用 worldAxis 同一方向定义。 */
 export function applySpin(world: any, view: PartView, part: MechanicalPart, angle: number): void {
-  if (!view.spinner) return;
-  const spin = quat.fromAxisAngle(quat.create(), localSpinAxis(part), angle);
-  const base = view.spinBaseQuat ?? [0, 0, 0, 1];
-  const composed = quat.multiply(quat.create(), spin, base);
-  setQuat(world, view.spinner, [composed[0] ?? 0, composed[1] ?? 0, composed[2] ?? 0, composed[3] ?? 1]);
+  const extras = view.extraSpinners ?? [];
+  if (!view.spinner && extras.length === 0) return;
+  const axis = localSpinAxis(part);
+  if (view.spinner) {
+    applySpinnerQuat(world, view.spinner, axis, view.spinBaseQuat ?? IDENTITY_QUAT, angle);
+  }
+  // 附加自转件跟随同一角度；axis 可覆盖（破碎机滚筒绕本地 Z），direction=-1 表示反向。
+  for (const extra of extras) {
+    applySpinnerQuat(world, extra.entity, extra.axis ?? axis, extra.baseQuat ?? IDENTITY_QUAT, angle * (extra.direction ?? 1));
+  }
+}
+
+function applySpinnerQuat(
+  world: any,
+  entity: EntityHandle,
+  axis: readonly [number, number, number],
+  base: readonly [number, number, number, number],
+  angle: number,
+): void {
+  const spin = quat.fromAxisAngle(quat.create(), [axis[0], axis[1], axis[2]], angle);
+  const composed = quat.multiply(quat.create(), spin, [base[0], base[1], base[2], base[3]]);
+  setQuat(world, entity, [composed[0] ?? 0, composed[1] ?? 0, composed[2] ?? 0, composed[3] ?? 1]);
 }
 
 /** 冲压机曲柄销/连杆/冲头位姿；只写 Transform，不决定 powered。 */

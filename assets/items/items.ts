@@ -137,7 +137,7 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
   {
     id: ITEM_IDS.FLYWHEEL_SOURCE,
     name: '手摇飞轮储能机',
-    description: '正式动力来源：靠近按住 F 摇动摇柄给飞轮储能，右键离合启停。储能耗尽后自动停转。',
+    description: '正式动力来源：靠近按住 C 摇动摇柄给飞轮储能，右键离合启停。储能耗尽后自动停转。',
     icon: 'flywheel_source',
     maxStack: 999,
     category: 'mechanical',
@@ -145,7 +145,7 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
   {
     id: ITEM_IDS.CRUSHER,
     name: '破碎机',
-    description: '工业加工机器：1 铁矿石 → 1 碎铁矿。必须由机械动力驱动，断轴/过载时暂停。',
+    description: '工业加工机器：1 铁矿石 → 1 碎铁矿。悬停按 C 从库存投料、右键取货；必须由机械动力驱动。',
     icon: 'crusher',
     maxStack: 999,
     category: 'mechanical',
@@ -153,7 +153,7 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
   {
     id: ITEM_IDS.SMELTER,
     name: '熔炼炉',
-    description: '工业加工机器：1 碎铁矿 → 1 铁锭。必须由机械动力驱动。',
+    description: '工业加工机器：1 碎铁矿 → 1 铁锭。悬停按 C 投料、右键取货；必须由机械动力驱动。',
     icon: 'smelter',
     maxStack: 999,
     category: 'mechanical',
@@ -161,7 +161,7 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
   {
     id: ITEM_IDS.FORGE,
     name: '锻压机',
-    description: '工业加工机器：把铁锭锻成机械零件。可用 R 切换配方（传动轴 / 立式传动带 / 溜槽）。',
+    description: '工业加工机器：把铁锭锻成机械零件。悬停按 R 切换配方（传动轴 / 立式传动带 / 溜槽），C 投料、右键取货。',
     icon: 'forge',
     maxStack: 999,
     category: 'mechanical',

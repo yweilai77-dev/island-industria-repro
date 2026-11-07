@@ -22,7 +22,7 @@ import type {} from '../spatial/service.ts';
 import { overlapsPlayer } from '../player/occupancy.ts';
 import type {} from '../player/player.ts';
 import { rayAabbDistance } from '../build/build.ts';
-import { BUILD_TARGET_STATE_KEY, type BuildTargetState } from '../build/target.ts';
+import { BUILD_TARGET_STATE_KEY, BUILD_SYSTEM_NAME, type BuildTargetState } from '../build/target.ts';
 import {
   DECK_THICKNESS,
   FLOOR_KINDS,
@@ -469,6 +469,8 @@ export const floorsSystem: Plugin = {
 
       world.addSystem(Update, {
         name: SYSTEM_NAME,
+        // 必须早于 build：模式锁资源要在 build 读它之前写好（否则同一帧内 build 仍会响应输入）。
+        before: [BUILD_SYSTEM_NAME],
         queries: [],
         fn: () => {
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
@@ -554,11 +556,7 @@ export const floorsSystem: Plugin = {
         if (world.hasResource(FLOOR_MODE_KEY)) world.removeResource(FLOOR_MODE_KEY);
         for (const record of records.values()) {
           unregister(record);
-          for (const entity of record.entities) {
-            if (world.despawn(entity)) {
-              // 已销毁：despawn 返回明确结果，忽略重复销毁错误。
-            }
-          }
+          for (const entity of record.entities) world.despawn(entity).unwrap();
         }
         records.clear();
         columnSlot.clear();

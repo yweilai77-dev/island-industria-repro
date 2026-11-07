@@ -24,7 +24,10 @@ export default async function playthrough(play) {
   await play.step('01-start-kit', async () => {
     const counts = await readCounts();
     console.log('KIT=' + JSON.stringify(counts));
-    assert(counts.length === 5 && counts[0] === 24 && counts[4] === 5, 'prototype kit mismatch: ' + JSON.stringify(counts));
+    // M1.8：套件从 5 种扩到 11 种零件（新增溜槽/立式传动带/飞轮源/破碎机/熔炼炉/锻压机），
+    // 但 M1.7 的 5 个旧零件数量必须保持不变（本条回归的就是那 5 项与后续建造流程）。
+    assert(counts.length >= 5 && counts[0] === 24 && counts[4] === 5,
+      'prototype kit mismatch: ' + JSON.stringify(counts));
     await play.screenshot('01-start');
   });
 
@@ -155,6 +158,7 @@ export default async function playthrough(play) {
     await play.screenshot('07-after-reload');
     const counts = await readCounts();
     console.log('RELOAD_KIT=' + JSON.stringify(counts));
-    assert(counts.length === 5 && counts[0] === 24, 'kit should reset exactly once after reload: ' + JSON.stringify(counts));
+    // M1.8：套件种类数从 5 扩到 11，但「刷新后只发一次、旧零件数量复原」这条回归不变。
+    assert(counts.length >= 5 && counts[0] === 24, 'kit should reset exactly once after reload: ' + JSON.stringify(counts));
   });
 }

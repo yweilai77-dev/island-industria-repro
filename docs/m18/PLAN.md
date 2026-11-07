@@ -181,3 +181,30 @@ recipes.ts（配方表）─> production.ts（纯加工状态机）───┴�
   - `m18d-loop.mjs`：铁锭→锻压→传动轴→入库→用于建造，整链重复 2 次。
   - 每个脚本按需求逐条断言并截命名图。
 - **15 分钟完整体验**：从空手采集开始，按任务书 §5 端到端流程实操并记录每步操作/阻碍/状态/结果。
+
+---
+
+## 9. 实施后修订（与方案初稿的差异，全部已落地）
+
+实施过程中发现的事实，修正本文件前几节的描述：
+
+1. **§3.1 立式传动带叠层不是同格**：L 层顶端口在 `(gx+1, 3L+3.5)`，L+1 层底部端口在 `(gx, 3L+3.5)`，
+   两者差 1 格 —— 所以第二段立式带必须放在 `(gx+1, gz)`，是「斜向上」的链。
+   这是「端口必须与水平轴 0.5m 端口面重合」的几何必然，`vertical-drive.test.ts` 已按实际几何断言。
+2. **§9 表格里的「平台逐格化」没有做**：玩家自建楼板已经能开孔穿轴，固定平台保持 M1.5 原样，
+   避免动到 5 处历史断言（`structures.test.ts` / `build-3d.test.ts` / `map-regression.test.ts`）。
+   给固定平台开孔归档到 M2。
+3. **GameRead 只扩不新增**：原方案 §3.8 说新增 `production` / `inventory` 两个 read。
+   实测 `play.state()/waitFor()/advance()` 在不传 id 时要求**恰好一个 read**，新增 read 会让
+   8 个历史脚本的 30+ 次 `advance()` 全部抛 `state-unavailable`。改为把 `production` /
+   `inventory` / `player` / `ui` 折叠进现有 `mechanical` 快照（只加字段，向后兼容）。
+4. **摇柄键是 `C` 不是 `F`**：`F` 已被采集占用（`harvest.pack.ts` 的 `justPressedCode('KeyF')`），
+   同时按会边摇柄边采集。改为按住 `C` 摇柄；`C` 顺带用于「悬停机器从库存投料」。
+5. **快捷栏 8 → 12 格**：11 种零件 + 1 个刻意保留的空槽（索引 5）。索引 5 必须保持空，
+   因为 M1.7 的历史脚本用 `Digit6` 选空槽来退出机械模式。键盘映射 1-9/0/`-`/`=`。
+6. **楼层建造是独立插件**：没有把 4 种新建筑塞进 `build.pack.ts` 的 `BUILDING_TYPES`，
+   而是新写 `floors.pack.ts`（`V` 模式 + 模式锁资源），`build.pack.ts` 只加了 3 行让出输入的判断。
+   这样 M1.2–M1.6 的建筑放置/调整行为零改动，回归风险最低。
+7. **验收工具需要的读数**：`mechanical` 快照额外暴露 `ui.buildTarget / hoveredPartId / selectedPartId /
+   floorMode / selectedItem / hotbar` 与 `player`。这些都是真实状态（放置仍走真实鼠标与合法性校验），
+   用途是让脚本在**真实输入**下确认"鼠标指向的确实是目标格"，而不是靠硬编码屏幕坐标碰运气。

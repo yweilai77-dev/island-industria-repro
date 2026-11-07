@@ -164,6 +164,14 @@ export function tickMachine(state: MachineState, input: MachineTickInput): boole
   const dt = Number.isFinite(input.delta) ? Math.max(0, Math.min(input.delta, 0.25)) : 0;
   const rate = Number.isFinite(input.rate) ? Math.max(0, input.rate) : 0;
 
+  // 零长度时间步：绝不改任何状态。
+  // （曾经在这里丢掉过原料：dt=0 时照常「整笔扣料」，但 progress += 0 不前进，
+  //   下一帧又因为进度为 0 重新要求整笔原料 → 缓冲里的料凭空消失。真机 playthrough 抓到的。）
+  if (dt <= 0) {
+    state.running = false;
+    return false;
+  }
+
   state.running = false;
   const recipe = activeRecipe(state, def);
   if (!recipe) {
@@ -220,7 +228,6 @@ export function tickMachine(state: MachineState, input: MachineTickInput): boole
     state.outputItem = outSpec.itemId;
     state.outputCount = outSpec.count;
   }
-  state.outputItem = outSpec.itemId;
   state.producedTotal += outSpec.count;
   state.progress = 0;
   return true;
@@ -240,5 +247,7 @@ export function flushMachine(state: MachineState): { readonly itemId: ItemId; re
   state.outputItem = null;
   state.outputCount = 0;
   state.progress = 0;
+  state.running = false;
+  state.block = 'no-recipe';
   return result;
 }

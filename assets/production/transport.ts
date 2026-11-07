@@ -1,4 +1,4 @@
-import type { Placement } from '../grid/grid.ts';
+import { CELL_SIZE, type Placement } from '../grid/grid.ts';
 import type { ItemId } from '../items/items.ts';
 import { levelBaseY } from '../spatial/space.ts';
 
@@ -78,7 +78,7 @@ export function advanceChute(state: ChuteState, delta: number): void {
     item.t = Math.min(CHUTE_BLOCKED_PROGRESS, item.t);
     return;
   }
-  item.t = Math.min(1, item.t + (CHUTE_SPEED * dt) / 1);
+  item.t = Math.min(1, item.t + (CHUTE_SPEED * dt) / CELL_SIZE);
 }
 
 /** 是否已到槽口、可以尝试交出。 */

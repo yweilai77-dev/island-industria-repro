@@ -12,15 +12,24 @@ export function createHarness(play) {
     if (!condition) throw new Error(message);
   };
 
+  /** 切到空快捷栏槽（索引 5），回到普通建造模式，便于读取建造目标。 */
+  const parkOnEmptySlot = async () => {
+    await play.keyboard.press('Digit6');
+    await play.advance(0.05);
+    const s = await state();
+    assert(s.ui?.hotbar?.selected === 5, 'expected empty hotbar slot 5, got ' + s.ui?.hotbar?.selected);
+  };
+
   const state = async () => play.state(DEFAULT_READ);
 
   const probeCell = async (pt) => {
     await play.mouse.move([pt[0], pt[1]]);
-    await play.wait(110);
+    await play.wait(70);
     const s = await state();
     const t = s.ui?.buildTarget;
+    const hovered = s.ui?.hoveredPartId ?? null;
     if (!t || !t.active || !t.cell) return null;
-    return { gx: t.cell.gx, gz: t.cell.gz, level: t.level, valid: t.valid };
+    return { gx: t.cell.gx, gz: t.cell.gz, level: t.level, valid: t.valid, hovered };
   };
 
   // ---- 最小二乘拟合 gx,gz ≈ a*x + b*y + c ----
@@ -81,18 +90,41 @@ export function createHarness(play) {
 
   /**
    * 标定：在屏幕上撒若干探针，拟合「屏幕坐标 → 格子坐标」，供 pointForCell 反解。
-   * 只标定玩家当前所在层（buildTarget.level 与玩家层一致）。
+   *
+   * 标定前先把快捷栏切到空槽（索引 5）：这样处于「普通建造模式」，
+   * 建造目标读数对任何格都会给出答案（不会因为格里有机械零件而变成 hover 导致没有目标）。
+   * 只标定玩家当前所在层。
    */
   const calibrate = async (label = 'calibrate') => {
-    const points = [
-      [0.28, 0.32], [0.52, 0.30], [0.74, 0.34],
-      [0.30, 0.56], [0.55, 0.58], [0.76, 0.54],
-      [0.40, 0.44], [0.66, 0.46],
-    ];
+    await parkOnEmptySlot();
+    // 密度要够：玩家站在二楼平台上时，屏幕上只有平台那一块是「有该层支撑」的格，
+    // 稀疏探针很可能只命中最少数，仿射拟合会失败。
+    const points = [];
+    for (let row = 0; row < 6; row += 1) {
+      for (let col = 0; col < 9; col += 1) {
+        points.push([0.18 + col * 0.08, 0.24 + row * 0.085]);
+      }
+    }
     const samples = [];
-    for (const pt of points) {
-      const cell = await probeCell(pt);
-      if (cell) samples.push({ x: pt[0], y: pt[1], gx: cell.gx, gz: cell.gz });
+    const collectPoints = async (list) => {
+      for (const pt of list) {
+        const cell = await probeCell(pt);
+        if (cell) samples.push({ x: pt[0], y: pt[1], gx: cell.gx, gz: cell.gz });
+      }
+    };
+    await collectPoints(points);
+    // 二楼可能只有很小的可建造区域（玩家自建几块楼板），粗网格命中不足时
+    // 以已命中的点为质心再做一轮更密的网格，避免仿射拟合被少数点带偏。
+    if (samples.length >= 1 && samples.length < 12) {
+      const cx = samples.reduce((sum, s) => sum + s.x, 0) / samples.length;
+      const cy = samples.reduce((sum, s) => sum + s.y, 0) / samples.length;
+      const fine = [];
+      for (let row = 0; row < 11; row += 1) {
+        for (let col = 0; col < 13; col += 1) {
+          fine.push([cx - 0.072 + col * 0.012, cy - 0.075 + row * 0.015]);
+        }
+      }
+      await collectPoints(fine);
     }
     await play.mouse.move([0.02, 0.02]);
     assert(samples.length >= 4, label + ': calibration needs at least 4 probes, got ' + samples.length);
@@ -107,7 +139,10 @@ export function createHarness(play) {
   };
 
   /** 反解某格中心对应的屏幕坐标（牛顿迭代把探针结果收敛到目标格）。 */
-  const pointForCell = async (cal, cell) => {
+  const pointForCell = async (cal, cell, options = {}) => {
+    const avoidHover = options.avoidHover === true;
+    // 探针必须在「普通建造模式」下读目标，否则格里有机械零件时会变成 hover、读不到格。
+    await parkOnEmptySlot();
     const { fit, inv } = cal;
     const targetX = cell.gx + 0.5;
     const targetZ = cell.gz + 0.5;
@@ -115,21 +150,43 @@ export function createHarness(play) {
     let y = inv.m10 * (targetX - fit.fx[2]) + inv.m11 * (targetZ - fit.fz[2]);
     x = Math.min(0.96, Math.max(0.04, x));
     y = Math.min(0.94, Math.max(0.06, y));
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    // 拟合本身在整个「玩家所在层」平面上都成立，所以即使某点没有可建造支撑（探针返回 null），
+    // 也能用拟合式估出它落在哪一格，继续往目标格收敛。
+    const estimateAt = (px, py) => ({
+      gx: Math.floor(fit.fx[0] * px + fit.fx[1] * py + fit.fx[2]),
+      gz: Math.floor(fit.fz[0] * px + fit.fz[1] * py + fit.fz[2]),
+    });
+    // 需要「鼠标不要压在已有零件上」时，靠这一组格内偏移把瞄准点在目标格里挪开。
+    const NUDGES = [
+      [0.32, 0], [-0.32, 0], [0, 0.32], [0, -0.32],
+      [0.32, 0.32], [-0.32, -0.32], [0.32, -0.32], [-0.32, 0.32],
+    ];
+    let nudgeIndex = 0;
+    for (let attempt = 0; attempt < 26; attempt += 1) {
       const probed = await probeCell([x, y]);
-      if (!probed) {
-        x = x * 0.9 + 0.5 * 0.1;
-        y = y * 0.9 + 0.5 * 0.1;
+      if (probed && probed.gx === cell.gx && probed.gz === cell.gz) {
+        if (!avoidHover || probed.hovered === null) {
+          await play.mouse.move([0.02, 0.02]);
+          return [x, y];
+        }
+        const nudge = NUDGES[nudgeIndex % NUDGES.length];
+        nudgeIndex += 1;
+        x = Math.min(0.96, Math.max(0.04, x + inv.m00 * nudge[0] + inv.m01 * nudge[1]));
+        y = Math.min(0.94, Math.max(0.06, y + inv.m10 * nudge[0] + inv.m11 * nudge[1]));
         continue;
       }
-      if (probed.gx === cell.gx && probed.gz === cell.gz) {
+      const here = probed ?? estimateAt(x, y);
+      const dGx = targetX - (here.gx + 0.5);
+      const dGz = targetZ - (here.gz + 0.5);
+      if (Math.abs(dGx) < 1e-9 && Math.abs(dGz) < 1e-9 && probed) {
         await play.mouse.move([0.02, 0.02]);
         return [x, y];
       }
-      const dGx = targetX - (probed.gx + 0.5);
-      const dGz = targetZ - (probed.gz + 0.5);
-      x = Math.min(0.96, Math.max(0.04, x + inv.m00 * dGx + inv.m01 * dGz));
-      y = Math.min(0.94, Math.max(0.06, y + inv.m10 * dGx + inv.m11 * dGz));
+      const stepX = inv.m00 * dGx + inv.m01 * dGz;
+      const stepY = inv.m10 * dGx + inv.m11 * dGz;
+      // 单步限幅，避免离群样本把点甩飞。
+      x = Math.min(0.96, Math.max(0.04, x + Math.max(-0.06, Math.min(0.06, stepX))));
+      y = Math.min(0.94, Math.max(0.06, y + Math.max(-0.05, Math.min(0.05, stepY))));
     }
     throw new Error('could not resolve screen point for cell ' + cell.gx + ',' + cell.gz);
   };
@@ -187,24 +244,58 @@ export function createHarness(play) {
     await play.advance(0.05);
   };
 
-  /** 按住某键移动玩家指定毫秒。 */
-  const move = async (key, ms) => {
-    await play.keyboard.hold(key, ms);
-    await play.advance(0.05);
+  /** 只用仿射式反解屏幕点（不探针）。用于目标格已被零件占用、探针拿不到建造目标的情况。 */
+  const pointForCellRaw = (cal, cell) => {
+    const { fit, inv } = cal;
+    const tx = cell.gx + 0.5;
+    const tz = cell.gz + 0.5;
+    const x = inv.m00 * (tx - fit.fx[2]) + inv.m01 * (tz - fit.fz[2]);
+    const y = inv.m10 * (tx - fit.fx[2]) + inv.m11 * (tz - fit.fz[2]);
+    return [Math.min(0.96, Math.max(0.04, x)), Math.min(0.94, Math.max(0.06, y))];
   };
 
-  /** 一直按住某个方向键直到玩家所在格等于目标格（有超时保护）。 */
-  const walkToCell = async (keys, cell, timeoutMs = 4000) => {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
+  /**
+   * 找到「鼠标悬停到某格上的零件」的屏幕点：从仿射估计点出发做小范围搜索，
+   * 直到 `hoveredPartId` 非空。返回 { point, partId } 或 null。
+   */
+  const hoverPartAt = async (cal, cell) => {
+    const base = pointForCellRaw(cal, cell);
+    for (const [dx, dy] of SCREEN_NUDGES) {
+      const candidate = [Math.min(0.97, Math.max(0.03, base[0] + dx)), Math.min(0.95, Math.max(0.05, base[1] + dy))];
+      await play.mouse.move(candidate);
+      await play.wait(80);
       const s = await state();
-      if (s.player.cell.gx === cell.gx && s.player.cell.gz === cell.gz) return true;
-      await play.keyboard.hold(keys, 160);
+      const hovered = s.ui?.hoveredPartId ?? null;
+      if (hovered !== null) return { point: candidate, partId: hovered };
     }
-    return false;
+    return null;
   };
 
-  /** 选择快捷栏槽位（真实按键；第 11/12 格用 DOM 点击）。 */
+  /**
+   * 找到「射线真的打到指定零件」的屏幕点。
+   * 相邻格上的高零件会挡住目标零件（射线先撞到它），所以这里在仿射估计点周围
+   * 做 8 方向 × 多半径的搜索，直到 hoveredPartId 等于目标 id。
+   */
+  const hoverSpecificPart = async (cal, cell, partId) => {
+    const base = pointForCellRaw(cal, cell);
+    const dirs = [[0, 0], [0, -1], [0, 1], [1, 0], [-1, 0], [0.7, -0.7], [-0.7, -0.7], [0.7, 0.7], [-0.7, 0.7]];
+    for (const radius of [0, 0.006, 0.012, 0.02, 0.03, 0.042, 0.055]) {
+      for (const [dx, dy] of dirs) {
+        const candidate = [
+          Math.min(0.97, Math.max(0.03, base[0] + dx * radius)),
+          Math.min(0.95, Math.max(0.05, base[1] + dy * radius)),
+        ];
+        await play.mouse.move(candidate);
+        await play.wait(70);
+        const s = await state();
+        if ((s.ui?.hoveredPartId ?? null) === partId) return candidate;
+      }
+    }
+    return null;
+  };
+
+  // ---------------- 机械零件放置 ----------------
+  /** 选择快捷栏槽位（真实按键）。第 11/12 格用 `-`/`=`。 */
   const selectSlot = async (index) => {
     const codes = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6',
       'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
@@ -214,26 +305,192 @@ export function createHarness(play) {
     await play.advance(0.04);
   };
 
-  /** 放置一个机械零件：选中槽位 → 旋转到位 → 点到目标格。 */
-  const placePart = async (cal, slot, cell, rotation = 0, label = 'part') => {
+  /**
+   * 在指定屏幕点附近放置机械零件。
+   * 相邻格上的高零件（例如立式传动带高 3m）会挡住目标格的射线，让「悬停零件」抢走建造目标；
+   * 所以这里在目标格内做一次小范围搜索，找到「落在目标格 + 没有压到任何零件」的瞄准点。
+   */
+  const SCREEN_NUDGES = (() => {
+    const list = [[0, 0]];
+    for (const radius of [0.008, 0.016, 0.026, 0.038]) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7]]) {
+        list.push([dx * radius, dy * radius]);
+      }
+    }
+    return list;
+  })();
+
+  const aimAt = async (pt, cell) => {
+    for (const [dx, dy] of SCREEN_NUDGES) {
+      const candidate = [Math.min(0.97, Math.max(0.03, pt[0] + dx)), Math.min(0.95, Math.max(0.05, pt[1] + dy))];
+      await play.mouse.move(candidate);
+      await play.wait(90);
+      const s = await state();
+      const t = s.ui?.buildTarget;
+      const hovered = s.ui?.hoveredPartId ?? null;
+      if (!t?.active || !t.cell) continue;
+      if (hovered !== null) continue;
+      if (cell && (t.cell.gx !== cell.gx || t.cell.gz !== cell.gz)) continue;
+      if (t.valid !== true) continue;
+      return { point: candidate, state: s };
+    }
+    return null;
+  };
+
+  const placePartAtPoint = async (pt, slot, rotation = 0, label = 'part', cell = null) => {
     await selectSlot(slot);
-    const turns = Math.round((rotation % 360) / 90);
+    // 机械放置的朝向是**全局累积**状态：必须按「目标 − 上一次」的差值按 R，
+    // 否则第二次放齿轮时会带着上一次（例如溜槽的 270°）朝向，端口全部转错方向、连不上。
+    const turns = ((((rotation - lastPlacementRotation) % 360) + 360) % 360) / 90;
     for (let i = 0; i < turns; i += 1) {
       await play.keyboard.press('KeyR');
       await play.advance(0.03);
     }
-    const pt = await pointForCell(cal, cell);
-    await play.mouse.move(pt);
-    await play.wait(150);
-    const before = (await state()).parts.length;
-    await play.mouse.click(pt);
-    await play.wait(200);
+    lastPlacementRotation = ((rotation % 360) + 360) % 360;
+    const aimed = await aimAt(pt, cell);
+    const aimedState = aimed ? aimed.state : await state();
+    if (label) {
+      console.log('PLACE-PROBE ' + label + ' aimed=' + (aimed ? 'yes' : 'no')
+        + ' slot=' + aimedState.ui?.hotbar?.selected
+        + ' selectedItem=' + String(aimedState.ui?.selectedItem)
+        + ' target=' + JSON.stringify(aimedState.ui?.buildTarget)
+        + ' hover=' + JSON.stringify(aimedState.ui?.hoveredPartId));
+    }
+    assert(aimed !== null,
+      label + ': no aim point found for'
+      + (cell ? ' cell ' + cell.gx + ',' + cell.gz : ' the given point')
+      + ' — target=' + JSON.stringify(aimedState.ui?.buildTarget)
+      + ' hover=' + JSON.stringify(aimedState.ui?.hoveredPartId));
+    const before = aimedState.parts.length;
+    await play.mouse.click(aimed.point);
+    await play.wait(240);
     const after = await state();
     assert(after.parts.length === before + 1,
-      label + ': expected a new part at ' + cell.gx + ',' + cell.gz
+      label + ': click did not create a part'
+      + (cell ? ' at ' + cell.gx + ',' + cell.gz : '')
       + ', parts ' + before + ' -> ' + after.parts.length
       + ' target=' + JSON.stringify(after.ui?.buildTarget));
     return after.parts[after.parts.length - 1];
+  };
+
+  /** 按格子放置机械零件（该格必须还没有零件）。 */
+  const placePart = async (cal, slot, cell, rotation = 0, label = 'part') => {
+    const pt = await pointForCell(cal, cell);
+    return placePartAtPoint(pt, slot, rotation, label, cell);
+  };
+
+  // ---------------- 玩家导航 ----------------
+  // 相机是 8 向俯视（默认 yaw = 45°），所以 WASD 的世界方向不是轴对齐的。
+  // 这里在运行时实测四个方向键的世界单位向量，再按目标方向挑最合适的按键组合，
+  // 不假设任何固定 yaw。
+  let learned = null;
+  let lastPlacementRotation = 0;
+  const KEY_CODES = ['KeyW', 'KeyA', 'KeyS', 'KeyD'];
+  const KEY_SUBSETS = [
+    ['KeyW'], ['KeyA'], ['KeyS'], ['KeyD'],
+    ['KeyW', 'KeyA'], ['KeyW', 'KeyD'], ['KeyA', 'KeyS'], ['KeyS', 'KeyD'],
+  ];
+
+  const learnMovement = async () => {
+    const measure = async (key) => {
+      const before = (await state()).player.position;
+      await play.keyboard.hold(key, 260);
+      await play.advance(0.05);
+      const after = (await state()).player.position;
+      const dx = after[0] - before[0];
+      const dz = after[2] - before[2];
+      const len = Math.hypot(dx, dz);
+      return len > 1e-6 ? [dx / len, dz / len] : [0, 0];
+    };
+    learned = {};
+    for (const key of KEY_CODES) learned[key] = await measure(key);
+    console.log('LEARNED=' + JSON.stringify(learned));
+    return learned;
+  };
+
+  const keysToward = (dx, dz) => {
+    if (!learned) throw new Error('learnMovement() must run before navigating');
+    const len = Math.hypot(dx, dz);
+    if (len < 1e-9) return [];
+    const tx = dx / len;
+    const tz = dz / len;
+    let best = [];
+    let bestDot = -Infinity;
+    for (const subset of KEY_SUBSETS) {
+      let sx = 0;
+      let sz = 0;
+      for (const key of subset) {
+        sx += learned[key][0];
+        sz += learned[key][1];
+      }
+      const slen = Math.hypot(sx, sz);
+      if (slen < 1e-9) continue;
+      const dot = (sx / slen) * tx + (sz / slen) * tz;
+      if (dot > bestDot) {
+        bestDot = dot;
+        best = subset;
+      }
+    }
+    return best;
+  };
+
+  const holdToward = async (dx, dz, ms) => {
+    const keys = keysToward(dx, dz);
+    if (keys.length === 0) return;
+    await play.keyboard.hold(keys, ms);
+  };
+
+  /** 沿世界方向持续前进，直到玩家所在格等于目标格（有超时保护）。 */
+  const gotoCell = async (cell, timeoutMs = 14000, trace = false) => {
+    const started = Date.now();
+    let iteration = 0;
+    while (Date.now() - started < timeoutMs) {
+      const s = await state();
+      const current = s.player.cell;
+      if (current.gx === cell.gx && current.gz === cell.gz) {
+        if (trace) console.log('WALK-OK ' + JSON.stringify(current) + ' in ' + iteration + ' steps');
+        return true;
+      }
+      const keys = keysToward(cell.gx - current.gx, cell.gz - current.gz);
+      if (keys.length === 0) return true;
+      if (trace && iteration % 6 === 0) {
+        console.log('WALK ' + iteration + ' ' + JSON.stringify(current) + ' keys=' + keys.join('+')
+          + ' pos=' + JSON.stringify(s.player.position.map((v) => Math.round(v * 100) / 100)));
+      }
+      await play.keyboard.hold(keys, 130);
+      iteration += 1;
+    }
+    if (trace) {
+      const s = await state();
+      console.log('WALK-STUCK at ' + JSON.stringify(s.player.cell) + ' target=' + JSON.stringify(cell));
+    }
+    return false;
+  };
+
+  /** 一直朝某世界方向走，直到玩家层数变成目标层（爬楼梯 / 下楼）。 */
+  const climbTo = async (level, dirX, dirZ, maxIterations = 90) => {
+    for (let i = 0; i < maxIterations; i += 1) {
+      const s = await state();
+      if (s.player.level === level) return true;
+      await holdToward(dirX, dirZ, 180);
+    }
+    const s = await state();
+    console.log('CLIMB-FAIL level=' + s.player.level + ' cell=' + JSON.stringify(s.player.cell));
+    return false;
+  };
+
+  /** 鼠标点到某个已知屏幕点（用于选中零件）。 */
+  const clickAt = async (pt) => {
+    await play.mouse.move(pt);
+    await play.wait(140);
+    await play.mouse.click(pt);
+    await play.wait(180);
+  };
+
+  /** 按住某键指定毫秒（摇柄、持续时间型交互用）。 */
+  const holdKey = async (key, ms) => {
+    await play.keyboard.hold(key, ms);
+    await play.advance(0.05);
   };
 
   const findPart = async (predicate) => {
@@ -250,8 +507,10 @@ export function createHarness(play) {
   };
 
   const rightClickAt = async (pt) => {
-    await play.mouse.click(pt, { button: 'right' });
-    await play.advance(0.06);
+    // 用原生 Playwright 右键（与 M1.7 验收脚本同一路径，最可靠）。
+    const size = play.page.viewportSize() ?? { width: 1280, height: 720 };
+    await play.page.mouse.click(pt[0] * size.width, pt[1] * size.height, { button: 'right' });
+    await play.advance(0.08);
   };
 
   const clearHover = async () => {
@@ -262,18 +521,28 @@ export function createHarness(play) {
   return {
     assert,
     state,
+    parkOnEmptySlot,
     probeCell,
     calibrate,
     pointForCell,
+    pointForCellRaw,
+    hoverPartAt,
+    hoverSpecificPart,
     currentTarget,
     setFloorMode,
     selectFloorKind,
     placeFloor,
     removeFloorAt,
-    move,
-    walkToCell,
+    learnMovement,
+    keysToward,
+    holdToward,
     selectSlot,
     placePart,
+    placePartAtPoint,
+    gotoCell,
+    climbTo,
+    clickAt,
+    holdKey,
     findPart,
     hoverCell,
     rightClickAt,

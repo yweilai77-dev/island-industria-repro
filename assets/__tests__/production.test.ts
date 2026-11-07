@@ -230,3 +230,20 @@ describe('M1.8-C machine state machine', () => {
     expect(stalled.progress).toBe(0);
   });
 });
+
+describe('M1.8 回归：零长度时间步不吞原料', () => {
+  it('does not consume inputs when delta is zero', () => {
+    const def = MECHANICAL_PART_DEFS.crusher;
+    const state = createMachineState(1);
+    insertInput(state, def, 'iron_ore', 2);
+    expect(state.inputCount).toBe(2);
+    const completed = tickMachine(state, { def, powered: true, rate: 1, delta: 0 });
+    expect(completed).toBe(false);
+    expect(state.inputCount).toBe(2);
+    expect(state.progress).toBe(0);
+    // 之后用正常帧长会真的开工并扣料。
+    tickMachine(state, { def, powered: true, rate: 1, delta: 0.1 });
+    expect(state.inputCount).toBe(1);
+    expect(state.progress).toBeGreaterThan(0);
+  });
+});

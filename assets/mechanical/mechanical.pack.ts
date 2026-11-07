@@ -25,6 +25,7 @@ import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import type {} from '../spatial/service.ts';
 import type {} from '@forgeax/engine/app';
 import { FLOOR_MODE_KEY } from '../build/floors.ts';
+import { BUILD_TARGET_STATE_KEY, type BuildTargetState } from '../build/target.ts';
 import {
   PROTOTYPE_KIT,
   PROTOTYPE_KIT_SLOTS,
@@ -274,6 +275,10 @@ export const mechanicalSystem: Plugin = {
         views.refreshJoints(anchors, viewAssets);
       };
 
+      const publishTarget = (target: BuildTargetState): void => {
+        world.insertResource(BUILD_TARGET_STATE_KEY, target);
+      };
+
       const commitTopology = (): void => {
         // 先重建连接和接头，只有全部成功后才增加 revision。
         registry.rebuildConnections();
@@ -434,6 +439,7 @@ export const mechanicalSystem: Plugin = {
           if (hoverPart !== undefined) {
             // 悬停在已有零件上：进入选择模式，不显示放置幽灵。
             setGhost(undefined, undefined, false);
+            publishTarget({ active: false });
             if (input.mouse.justPressed(0)) selectedPartId = hoverPart;
             showSelection(registry.get(selectedPartId ?? hoverPart));
             return;
@@ -441,12 +447,20 @@ export const mechanicalSystem: Plugin = {
           if (placement) {
             const valid = validPlacement(definition, placement);
             setGhost(definition, placement, valid);
+            publishTarget({
+              active: true,
+              cell: { gx: placement.gx, gz: placement.gz },
+              level,
+              baseY: levelBaseY(level),
+              valid,
+            });
             showSelection(selectedPartId === undefined ? undefined : registry.get(selectedPartId));
             if (input.mouse.justPressed(0) && valid) {
               place(definition, placement);
             }
           } else {
             setGhost(undefined, undefined, false);
+            publishTarget({ active: false });
             showSelection(selectedPartId === undefined ? undefined : registry.get(selectedPartId));
           }
         },

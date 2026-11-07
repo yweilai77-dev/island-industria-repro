@@ -31,7 +31,7 @@ const WIND_VERTICAL_TOLERANCE = 2.5;
 /**
  * M1.7-C runtime（M1.8 扩展为整条生产链的 tick 中枢）：
  * - 右键：悬停的正式/测试动力源 → 离合启停；悬停的加工机器 → 投料 / 取货；
- * - 按住 `F`：靠近手摇飞轮储能机时摇动摇柄给飞轮储能；
+ * - 按住 `C`：靠近手摇飞轮储能机时摇动摇柄给飞轮储能；
  * - 悬停加工机器按 `R`：循环配方；
  * - 每帧：动力解算 → 储能结算 → 加工推进 → 机器把产物推给相邻溜槽 → 溜槽下滑并交接；
  * - 只读 GameRead 投影：机械/动力 + 生产 + 库存，**只有一个 read**（多 read 会让历史 playthrough 的
@@ -141,9 +141,9 @@ export const mechanicalRuntime: Plugin = {
 
       const machineIsDriven = (partId: number): boolean => Math.abs(state.omegaOf(partId)) > 1e-9;
 
-      /** 按住 F 且靠近某台飞轮时给它储能；离开则停止摇动。 */
+      /** 按住 C 且靠近某台飞轮时给它储能；离开则停止摇动。 */
       const updateWinding = (parts: readonly MechanicalPart[], input: InputSnapshot): void => {
-        const held = input.keyboard.downCode('KeyF');
+        const held = input.keyboard.downCode('KeyC');
         const position = player.state.position;
         for (const part of parts) {
           const spec = part.def.energy;
@@ -237,6 +237,14 @@ export const mechanicalRuntime: Plugin = {
             }
             if (input.keyboard.justPressedCode('KeyR') && targetPart && isProductionMachine(targetPart.def)) {
               production.cycleMachineRecipe(targetPart.id);
+            }
+            // 悬停加工机器按 C：从库存投 1 件当前配方原料（快捷栏已被 11 种零件占满，
+            // 不让玩家必须先回背包把矿石绑到快捷栏）。
+            if (input.keyboard.justPressedCode('KeyC') && targetPart && isProductionMachine(targetPart.def)) {
+              production.loadFromInventory(targetPart.id, {
+                has: (itemId, count) => inventory.has(itemId, count),
+                remove: (itemId, count) => inventory.remove(itemId, count),
+              });
             }
           }
 

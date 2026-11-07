@@ -10,6 +10,7 @@ import {
   takeOutput,
   tickMachine,
   activeRecipe,
+  acceptedInputOf,
   type MachineState,
 } from './production.ts';
 import {
@@ -146,6 +147,26 @@ export class ProductionRuntime {
     const part = this.partMap.get(partId);
     if (!state || !part) return 0;
     return insertInput(state, part.def, itemId, count);
+  }
+
+  /**
+   * 从玩家库存「投料」：按当前配方需要的原料取 1 件放进输入缓冲。
+   * 这样玩家不必先把矿石绑到快捷栏（快捷栏 12 格已被 11 种零件占满）。
+   */
+  loadFromInventory(
+    partId: number,
+    io: { has: (itemId: ItemId, count: number) => boolean; remove: (itemId: ItemId, count: number) => boolean },
+  ): number {
+    const state = this.machines.get(partId);
+    const part = this.partMap.get(partId);
+    if (!state || !part) return 0;
+    const accepted = acceptedInputOf(state, part.def);
+    if (accepted === undefined) return 0;
+    if (!io.has(accepted, 1)) return 0;
+    const inserted = insertInput(state, part.def, accepted, 1);
+    if (inserted <= 0) return 0;
+    io.remove(accepted, inserted);
+    return inserted;
   }
 
   /** 玩家从机器取出产物；返回取出的物品（由调用方加入库存）。 */
