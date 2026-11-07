@@ -32,4 +32,6 @@ export const PACKAGE_IDS = Object.freeze({
   // M1.5-B 独立空间服务与固定结构
   spatial: definePackageId('019fbf00-5700-7000-8000-000000000000'),
   structures: definePackageId('019fbf00-5800-7000-8000-000000000000'),
+  // M1.7-A 机械零件/端口/放置系统
+  mechanical: definePackageId('019fbf00-5900-7000-8000-000000000000'),
 });

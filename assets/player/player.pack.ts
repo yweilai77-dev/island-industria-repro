@@ -9,6 +9,7 @@ import { ok } from '@forgeax/engine/types';
 import { PACKAGE_IDS, assetGuid, guidText } from '../shared/asset-refs.ts';
 import { cellToCenter } from '../grid/grid.ts';
 import { BUILD_ADJUSTING_KEY } from '../build/adjustment.ts';
+import { blocksPlayerMove } from './occupancy.ts';
 import type {} from '../spatial/service.ts';
 import {
   FLAT_SWITCH_TOLERANCE,
@@ -146,7 +147,19 @@ export const playerMarker: Plugin = {
               },
               nextX,
               nextZ,
-              { supports: spatial.supports, traversals: spatial.traversals },
+              {
+                supports: spatial.supports,
+                traversals: spatial.traversals,
+                isBlockedMove: (fromX, fromZ, toX, toZ, yMin, yMax) => {
+                  for (const collider of spatial.structures.all()) {
+                    if (!collider.blocksPlayer) continue;
+                    if (blocksPlayerMove(collider.aabb, fromX, fromZ, toX, toZ, yMin, yMax)) {
+                      return true;
+                    }
+                  }
+                  return false;
+                },
+              },
             );
             if (!result.moved) return;
 

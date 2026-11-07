@@ -61,6 +61,8 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.inventory, 'plugin/inventory')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.gameUiBridge, 'plugin/game-ui-bridge')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.harvest, 'plugin/harvest')) },
+          // 机械系统最后挂载：需要 inventory/hotbar/spatial/player 已就绪。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical')) },
         ],
       },
     },

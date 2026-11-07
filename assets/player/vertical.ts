@@ -32,6 +32,18 @@ export interface VerticalState {
 export interface VerticalWorld {
   readonly supports: SupportRegistry;
   readonly traversals: TraversalRegistry;
+  /**
+   * 可选机械阻挡：从 (fromX,fromZ) 到 (toX,toZ)、脚底高度范围 [yMin,yMax]
+   * 的移动是否被 blocksPlayer 结构挡住。不传时行为与 M1.5 完全一致。
+   */
+  readonly isBlockedMove?: (
+    fromX: number,
+    fromZ: number,
+    toX: number,
+    toZ: number,
+    yMin: number,
+    yMax: number,
+  ) => boolean;
 }
 
 export type VerticalMoveResult =
@@ -198,6 +210,7 @@ function exitEdge(
 }
 
 function finish(
+  current: VerticalState,
   x: number,
   feetY: number,
   z: number,
@@ -205,6 +218,13 @@ function finish(
   supportId: string,
   world: VerticalWorld,
 ): VerticalMoveResult {
+  if (world.isBlockedMove) {
+    const yMin = Math.min(current.feetY, feetY);
+    const yMax = Math.max(current.feetY, feetY);
+    if (world.isBlockedMove(current.x, current.z, x, z, yMin, yMax)) {
+      return { moved: false };
+    }
+  }
   const stair = world.traversals.get(supportId);
   if (stair) {
     const index = stairStepIndexAt(x, z, stair);
@@ -253,7 +273,7 @@ export function resolveMove(
       if (index === undefined) return { moved: false };
       const top = stairSurfaceStepTopY(stair, index);
       if (Math.abs(top - current.feetY) > STAIR_CONTINUOUS_TOLERANCE) return { moved: false };
-      return finish(nextX, top, nextZ, current.level, stair.id, world);
+      return finish(current, nextX, top, nextZ, current.level, stair.id, world);
     }
     const edge = exitEdge(current.x, current.z, nextX, nextZ, stair);
     if (edge !== 'low' && edge !== 'high') return { moved: false };
@@ -265,7 +285,7 @@ export function resolveMove(
       STAIR_ENTRY_TOLERANCE,
     );
     if (!target) return { moved: false };
-    return finish(nextX, target.worldY, nextZ, target.level, target.id, world);
+    return finish(current, nextX, target.worldY, nextZ, target.level, target.id, world);
   }
 
   const flat = currentFlatSupport(current, world);
@@ -280,7 +300,7 @@ export function resolveMove(
     if (index === undefined) return { moved: false };
     const top = stairSurfaceStepTopY(nextStair, index);
     if (Math.abs(top - current.feetY) > STAIR_ENTRY_TOLERANCE) return { moved: false };
-    return finish(nextX, top, nextZ, current.level, nextStair.id, world);
+    return finish(current, nextX, top, nextZ, current.level, nextStair.id, world);
   }
 
   const target = selectFlatSupport(
@@ -290,7 +310,7 @@ export function resolveMove(
     FLAT_SWITCH_TOLERANCE,
   );
   if (!target) return { moved: false };
-  return finish(nextX, target.worldY, nextZ, target.level, target.id, world);
+  return finish(current, nextX, target.worldY, nextZ, target.level, target.id, world);
 }
 
 /**

@@ -13,6 +13,7 @@ import { RenderQueue } from '@forgeax/engine/types';
 import { ok } from '@forgeax/engine/types';
 import { PACKAGE_IDS } from '../shared/asset-refs.ts';
 import { resolveSceneEntity } from '../shared/scene-refs.ts';
+import { isMechanicalSelection } from './input-mode.ts';
 import type {} from '../player/player.ts';
 import {
   createPlacement,
@@ -481,6 +482,19 @@ export const buildSystem: Plugin = {
           queries: [],
           fn: () => {
             const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
+            const selectedHotbarItem = hotbar.slots[hotbar.selected] ?? null;
+
+            // 机械模式：build 完全让出输入（机械系统在 build 之后接管）。
+            // 同时清掉普通建筑选中/调整状态，保证 X/G 不会误作用于普通建筑。
+            if (isMechanicalSelection(selectedHotbarItem)) {
+              if (adjustment !== undefined) finishAdjustment('abort');
+              hideAllGhosts();
+              hideDirectionMarker();
+              hideSelection();
+              publishTarget({ active: false });
+              return;
+            }
+
             const size = bootstrapHost.drawingBufferSize();
             const position = input.mouse.position;
 
@@ -568,8 +582,7 @@ export const buildSystem: Plugin = {
             }
 
             const type = BUILDING_TYPES[activeTypeIndex] as (typeof BUILDING_TYPES)[number];
-            // 选中了快捷栏物品时，左键保留给后续物品使用（M1.5），本期不触发建造。
-            const selectedHotbarItem = hotbar.slots[hotbar.selected] ?? null;
+            // 选中了非机械物品时，左键同样保留给物品使用（M1.5），本期不触发建造。
             const targetLevel = currentBuildLevel();
             const target = targetLevel !== undefined && ray
               ? pickSupportTarget(ray, targetLevel, supports)
