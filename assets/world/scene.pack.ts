@@ -14,6 +14,7 @@ import { Name, Transform } from '@forgeax/engine/scene';
 import type { AssetGuid, SceneAsset, SceneEntity } from '@forgeax/engine/types';
 import { ok } from '@forgeax/engine/types';
 import { assetGuid, guidText, PACKAGE_IDS } from '../shared/asset-refs.ts';
+import { MAP_CONFIG, edgeTrimBoxes } from './map-config.ts';
 
 const DEG = Math.PI / 180;
 
@@ -50,8 +51,23 @@ function mvpScene(): SceneAsset {
   return {
     kind: 'scene',
     entities: Object.fromEntries([
-      // 地面：扁平长方体，顶面在 y = 0
-      meshEntity('ground', 'Ground', assetGuid(PACKAGE_IDS.geometry, 'mesh/ground'), [0, -0.1, 0]),
+      // 地面：扁平长方体，顶面在 y = 0；尺寸/中心全部由 MapConfig 派生。
+      meshEntity(
+        'ground',
+        'Ground',
+        assetGuid(PACKAGE_IDS.geometry, 'mesh/ground'),
+        [0, MAP_CONFIG.groundCenterY, 0],
+      ),
+      // M1.6 地图边缘包边：四段静态视觉，不注册任何碰撞/支撑。
+      ...edgeTrimBoxes(MAP_CONFIG).map((box) => meshEntity(
+        `edge-${box.id}`,
+        `Edge Trim ${box.id}`,
+        assetGuid(
+          PACKAGE_IDS.geometry,
+          box.id === 'north' || box.id === 'south' ? 'mesh/edge-x' : 'mesh/edge-z',
+        ),
+        box.pos,
+      )),
       // 太阳：一个方向光，负责主光与阴影
       [
         'sun',

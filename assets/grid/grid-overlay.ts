@@ -1,20 +1,24 @@
-import { worldToCell, type Cell } from './grid.ts';
+import { CELL_SIZE, worldToCell, type Cell } from './grid.ts';
+import { MAP_CONFIG } from '../world/map-config.ts';
 
 /**
  * M0.4 网格可视化的纯数学部分（零引擎依赖，可单测）。
  *
- * 地面范围与 assets/world/scene.pack.ts 保持一致：20×20 米、X/Z ∈ [-10, 10]，
- * 因此可用格坐标是 -10 … 9（每格 1 米）。
+ * M1.6：地面范围不再写死，全部由 assets/world/map-config.ts 派生。
+ * 当前生产地图 32×32 米、X/Z ∈ [-16, 16)，可用格坐标 -16 … 15。
  */
 
-/** 地面半边长（米）。 */
-export const BUILD_AREA_HALF_EXTENT = 10;
-/** 可用格坐标下限（含）。 */
-export const BUILD_AREA_MIN_CELL = -10;
-/** 可用格坐标上限（含）。 */
-export const BUILD_AREA_MAX_CELL = 9;
-/** 网格线数量：-10 … 10 共 21 条/方向。 */
-export const GRID_LINE_COUNT = 21;
+/** 地面半边长（米，X 方向）。保留旧名作为兼容性派生别名。 */
+export const BUILD_AREA_HALF_EXTENT = MAP_CONFIG.halfWidth;
+/** 可用格坐标下限（含，X 方向）。 */
+export const BUILD_AREA_MIN_CELL = MAP_CONFIG.minCellX;
+/** 可用格坐标上限（含，X 方向）。 */
+export const BUILD_AREA_MAX_CELL = MAP_CONFIG.maxCellX;
+/** 网格线数量（X 方向）；Z 方向见 GRID_LINE_COUNT_Z。 */
+export const GRID_LINE_COUNT_X = MAP_CONFIG.gridLineCountX;
+export const GRID_LINE_COUNT_Z = MAP_CONFIG.gridLineCountZ;
+/** 兼容旧名：旧调用方默认正方形地图。 */
+export const GRID_LINE_COUNT = GRID_LINE_COUNT_X;
 /** 网格线抬高量，避免与地面顶面 z-fighting。 */
 export const GRID_LINE_Y = 0.01;
 /** 高亮薄板中心高度（薄板高 0.02，顶面在 0.04）。 */
@@ -27,22 +31,32 @@ function pushVertex(out: number[], x: number, y: number, z: number): void {
 }
 
 /**
- * 生成 20×20 网格的 line-list 顶点（非索引）。
- * 每个方向 21 条线，每条 2 个端点 → 84 个顶点 → 252 个 float。
+ * 生成覆盖指定半边的 line-list 网格顶点（非索引）。
+ * 条数由半边长推导，而不是模块常量，避免“只改 half 不改条数”的错位。
+ * 每条线 2 个端点；默认 32×32 地图 → 33+33 条线 → 132 顶点 / 396 float。
  */
 export function buildGridLinePositions(
   y: number = GRID_LINE_Y,
-  halfExtent: number = BUILD_AREA_HALF_EXTENT,
+  halfX: number = MAP_CONFIG.halfWidth,
+  halfZ: number = MAP_CONFIG.halfDepth,
 ): Float32Array {
+  if (!Number.isFinite(halfX) || !Number.isFinite(halfZ) || !(halfX > 0) || !(halfZ > 0)) {
+    throw new RangeError(`grid half extents must be positive finite numbers, received (${halfX}, ${halfZ})`);
+  }
+  const countX = Math.round((halfX * 2) / CELL_SIZE) + 1;
+  const countZ = Math.round((halfZ * 2) / CELL_SIZE) + 1;
   const out: number[] = [];
-  for (let i = 0; i < GRID_LINE_COUNT; i += 1) {
-    const coord = -halfExtent + i;
+  for (let i = 0; i < countX; i += 1) {
+    const coord = -halfX + i * CELL_SIZE;
     // 平行于 Z 轴的线
-    pushVertex(out, coord, y, -halfExtent);
-    pushVertex(out, coord, y, halfExtent);
+    pushVertex(out, coord, y, -halfZ);
+    pushVertex(out, coord, y, halfZ);
+  }
+  for (let i = 0; i < countZ; i += 1) {
+    const coord = -halfZ + i * CELL_SIZE;
     // 平行于 X 轴的线
-    pushVertex(out, -halfExtent, y, coord);
-    pushVertex(out, halfExtent, y, coord);
+    pushVertex(out, -halfX, y, coord);
+    pushVertex(out, halfX, y, coord);
   }
   return new Float32Array(out);
 }
@@ -66,14 +80,10 @@ export function intersectGroundPlane(
 
 /** 格坐标是否在可建造地面范围内。 */
 export function isBuildAreaCell(cell: Cell): boolean {
-  return cell.gx >= BUILD_AREA_MIN_CELL
-    && cell.gx <= BUILD_AREA_MAX_CELL
-    && cell.gz >= BUILD_AREA_MIN_CELL
-    && cell.gz <= BUILD_AREA_MAX_CELL;
+  return MAP_CONFIG.containsCell(cell);
 }
 
 /** 世界点 → 可建造格；超出地面范围返回 undefined。 */
 export function buildAreaCellAt(worldX: number, worldZ: number): Cell | undefined {
-  const cell = worldToCell(worldX, worldZ);
-  return isBuildAreaCell(cell) ? cell : undefined;
+  return MAP_CONFIG.buildAreaCellAt(worldX, worldZ);
 }

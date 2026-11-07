@@ -9,7 +9,7 @@ import {
 /** 首期只有铁矿石一种资源。 */
 export type ResourceType = 'iron-ore';
 
-/** 每个矿点的初始储量；两处共 40。 */
+/** 每个矿点的初始储量；四处共 80。 */
 export const IRON_ORE_MAX_AMOUNT = 20;
 
 /** 资源节点的静态定义（锚点是最小角整数格）。 */
@@ -24,12 +24,17 @@ export interface ResourceNodeSpec {
 }
 
 /**
- * 两处铁矿露头（2×2 格），都在初始相机视野内、避开玩家出生格 (-2,2)、
- * 彼此不重叠，并给中央建造演示区留出空间。
+ * 四处铁矿露头（2×2 格）：
+ * - A、B 保留 M1.5 原坐标与行为；
+ * - C、D 位于 M1.6 新增区域（旧 20×20 之外），四象限各一处；
+ * - 均避开玩家出生格 (-2,2)、固定平台 x[0,8)/z[2,8) 与楼梯 x[-4,0)/z[3,4)；
+ * - 彼此不重叠，总储量 4×20=80，仍低于 3D HUD 两位数字上限 99。
  */
 export const IRON_ORE_NODES: readonly ResourceNodeSpec[] = [
   { id: 1, type: 'iron-ore', displayName: 'Iron Ore Node A', gx: -5, gz: 4, w: 2, d: 2 },
   { id: 2, type: 'iron-ore', displayName: 'Iron Ore Node B', gx: 4, gz: -5, w: 2, d: 2 },
+  { id: 3, type: 'iron-ore', displayName: 'Iron Ore Node C', gx: -13, gz: -7, w: 2, d: 2 },
+  { id: 4, type: 'iron-ore', displayName: 'Iron Ore Node D', gx: 10, gz: 10, w: 2, d: 2 },
 ];
 
 /** 节点在网格上的 Placement（rotation 固定 0，资源节点不旋转）。 */

@@ -1,8 +1,9 @@
 import type { EntityHandle } from '@forgeax/engine/ecs';
 import type { Cell } from '../grid/grid.ts';
 import type { Level } from '../spatial/space.ts';
+import { MAP_CONFIG } from '../world/map-config.ts';
 
-/** 玩家出生格（地图中部偏左，开局即可看到两处铁矿）。 */
+/** 玩家出生格（保留 M1.5 原坐标：地图中部偏左，开局即可看到两处旧铁矿）。 */
 export const PLAYER_START_CELL: Cell = { gx: -2, gz: 2 };
 
 /** 正面方向：-Z（地图北），与相机 yaw=0 的视线方向一致。 */
@@ -10,8 +11,11 @@ export type FacingDirection = 'north';
 
 /** 玩家移动速度（米/秒）。 */
 export const PLAYER_SPEED = 4;
-/** 玩家中心允许到达的地面范围（地面为 [-10, 10]，留出约半个身位）。 */
-export const PLAYER_BOUNDS = 9.5;
+/** 玩家中心允许到达的地图边界（米），由 MapConfig 派生；当前为 ±15.5。 */
+export const PLAYER_BOUNDS_X = MAP_CONFIG.playerBoundsX;
+export const PLAYER_BOUNDS_Z = MAP_CONFIG.playerBoundsZ;
+/** 兼容性派生别名（正方形地图下等于 X 边界）；新代码请使用 _X/_Z。 */
+export const PLAYER_BOUNDS = PLAYER_BOUNDS_X;
 /** 单帧最大推进时间：标签页挂起恢复时避免瞬移。 */
 export const PLAYER_MAX_STEP_SECONDS = 0.1;
 export const PLAYER_MOVE_SYSTEM_NAME = 'island-industria/player-move';
@@ -62,11 +66,11 @@ export function moveVector(
   return { x: x / length, z: z / length, length };
 }
 
-/** 把玩家位置夹在地面范围内。 */
+/** 把玩家位置夹在地图有效范围内（X/Z 分别夹取，为未来矩形地图留接口）。 */
 export function clampPlayerPosition(x: number, z: number): [number, number] {
   return [
-    Math.min(PLAYER_BOUNDS, Math.max(-PLAYER_BOUNDS, x)),
-    Math.min(PLAYER_BOUNDS, Math.max(-PLAYER_BOUNDS, z)),
+    Math.min(PLAYER_BOUNDS_X, Math.max(-PLAYER_BOUNDS_X, x)),
+    Math.min(PLAYER_BOUNDS_Z, Math.max(-PLAYER_BOUNDS_Z, z)),
   ];
 }
 
