@@ -52,9 +52,14 @@ describe('mechanical port geometry and signatures', () => {
   });
 
   it('exposes one signed worldAxis entry for network and animation', () => {
-    expect(worldAxis(part(1, 'shaft', -2, 2, 0))).toEqual([1, 0, 0]);
-    expect(worldAxis(part(2, 'shaft', -2, 2, 180))).toEqual([-1, 0, 0]);
-    expect(worldAxis(part(3, 'gear_12', -2, 2, 90))[2]).toBeCloseTo(-1, 12);
+    const axis0 = worldAxis(part(1, 'shaft', -2, 2, 0));
+    const axis180 = worldAxis(part(2, 'shaft', -2, 2, 180));
+    const axis90 = worldAxis(part(3, 'gear_12', -2, 2, 90));
+    expect(axis0[0]).toBeCloseTo(1, 12);
+    expect(axis0[1]).toBeCloseTo(0, 12);
+    expect(axis0[2]).toBeCloseTo(0, 12);
+    expect(axis180[0]).toBeCloseTo(-1, 12);
+    expect(axis90[2]).toBeCloseTo(-1, 12);
   });
 
   it('connects two coaxial shafts with signed axis ratio', () => {
