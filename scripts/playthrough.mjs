@@ -150,10 +150,10 @@ export default async function playthrough(play) {
     await play.screenshot('15-corner-placed');
     // 2×2 在边缘 → footprint 越界，红色非法幽灵（避开已放置格）
     await play.keyboard.press('BracketRight');
-    await play.mouse.move([0.5, 0.55]);
+    await play.mouse.move([0.52, 0.66]);
     await play.wait(250);
     await play.screenshot('16-corner-ghost-invalid');
-    await play.mouse.click([0.5, 0.55]);
+    await play.mouse.click([0.52, 0.66]);
     await play.wait(250);
     await play.screenshot('17-corner-invalid-click');
     await play.keyboard.press('BracketLeft');
