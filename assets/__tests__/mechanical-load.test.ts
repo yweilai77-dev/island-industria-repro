@@ -161,6 +161,24 @@ describe('M1.7-C load and overload', () => {
     expect(solution.speedFactorByComponent.get(0)).toBeCloseTo(0.8, 12);
   });
 
+  it('reports the triggering load and zero speed when every branch is stalled', () => {
+    // 单条支路上的 12T 齿轮挂 3 台机器：60 > 齿轮承载 50，整条支路停；
+    // 网络里没有其它机器 → 组件表现为停转，但需求必须上报为 60 而不是清零后的 0。
+    const parts = [
+      part(1, 'power_source'), part(2, 'shaft'), part(3, 'gear_12'),
+      part(31, 'machine'), part(32, 'machine'), part(33, 'machine'),
+    ];
+    const connections = [edge(1, 2, 1), edge(2, 3, 1), edge(3, 31, 1), edge(3, 32, 1), edge(3, 33, 1)];
+    const topology = buildPowerTopology(parts, connections, 1);
+    const solution = solvePower(topology, parts, new Set([1]));
+    expect(solution.components[0]?.status).toBe('stalled');
+    expect(solution.components[0]?.reason).toBe('branch-overload');
+    expect(solution.demandByComponent.get(0)).toBeCloseTo(3 * MACHINE_LOAD, 12);
+    expect(solution.speedFactorByComponent.get(0)).toBeCloseTo(0, 12);
+    expect(solution.torqueByPart.get(3)).toBeCloseTo(3 * MACHINE_LOAD, 12);
+    expect(solution.omegaByPart.size).toBe(0);
+  });
+
   it('recovers after the load on the stalled branch drops', () => {
     const state = new MechanicalRuntimeState();
     const parts = [

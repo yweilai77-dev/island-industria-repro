@@ -326,6 +326,8 @@ export function solvePower(
     let overload: NetworkReason | null = null;
     /** 触发整网过载时的源侧需求；停转后不能再拿清零后的需求上报。 */
     let overloadDemand: number | null = null;
+    /** 最近一次支路停转前的源侧需求（用于"全部支路都停"时的上报值）。 */
+    let lastBranchDemand: number | null = null;
 
     // 子节点深度一定大于父节点，所以逆 BFS 序就是合法后序。
     const computeDemand = (): Map<number, number> => {
@@ -383,21 +385,11 @@ export function solvePower(
       }
       if (offender === undefined) break;
       overload = 'branch-overload';
+      lastBranchDemand = sourceDemand;
       stallSubtree(offender, demand);
     }
 
-    const sourceDemand = overload === 'source-overload'
-      ? (overloadDemand ?? 0)
-      : (demand.get(sourceId) ?? 0);
-    const factor = overload === 'source-overload'
-      ? 0
-      : capacity > 0
-        ? Math.min(1, Math.max(0, 1 - sourceDemand / capacity))
-        : 0;
-    speedFactorByComponent.set(component.id, factor);
-    demandByComponent.set(component.id, sourceDemand);
-    capacityByComponent.set(component.id, capacity);
-
+    // 先统计停转零件与仍在运行的机器，再决定上报的负载/速度因子。
     let runningMachines = 0;
     for (const id of order) {
       const part = partMap.get(id);
@@ -408,10 +400,37 @@ export function solvePower(
         continue;
       }
       torqueByPart.set(id, demand.get(id) ?? 0);
-      omegaByPart.set(id, ratedOmega * factor * (tree.relativeOmega.get(id) ?? 0));
-      if (part.def.kind === 'machine') {
-        poweredMachines.add(id);
-        runningMachines += 1;
+      if (part.def.kind === 'machine') runningMachines += 1;
+    }
+
+    const allMachinesStalled = overload === 'branch-overload'
+      && component.machineIds.length > 0
+      && runningMachines === 0;
+    let reportedDemand: number;
+    let factor: number;
+    if (overload === 'source-overload') {
+      // 整网过载：上报触发过载时的需求，速度为 0。
+      reportedDemand = overloadDemand ?? 0;
+      factor = 0;
+    } else if (allMachinesStalled) {
+      // 支路停转蔓延到全部机器：对玩家就是停转，同样上报触发停转时的需求。
+      reportedDemand = lastBranchDemand ?? 0;
+      factor = 0;
+    } else {
+      reportedDemand = demand.get(sourceId) ?? 0;
+      factor = capacity > 0 ? Math.min(1, Math.max(0, 1 - reportedDemand / capacity)) : 0;
+    }
+    speedFactorByComponent.set(component.id, factor);
+    demandByComponent.set(component.id, reportedDemand);
+    capacityByComponent.set(component.id, capacity);
+
+    // 速度因子为 0（整网/全支路停转）时不解算角速度：没有零件算"有动力"。
+    if (factor > 0) {
+      for (const id of order) {
+        if (stalled.has(id)) continue;
+        omegaByPart.set(id, ratedOmega * factor * (tree.relativeOmega.get(id) ?? 0));
+        const part = partMap.get(id);
+        if (part && part.def.kind === 'machine') poweredMachines.add(id);
       }
     }
 
@@ -420,8 +439,7 @@ export function solvePower(
     if (overload === 'source-overload') {
       status = 'stalled';
       reason = 'source-overload';
-    } else if (overload === 'branch-overload' && component.machineIds.length > 0 && runningMachines === 0) {
-      // 所有机器都在被停掉的支路上：整个网络对玩家表现为"停转"。
+    } else if (allMachinesStalled) {
       status = 'stalled';
       reason = 'branch-overload';
     }
