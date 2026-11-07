@@ -97,3 +97,10 @@ expected start, not an environment failure.
 | Physics, character motion | `forgeax-engine-physics` |
 | Blocked checks, Linux headless, release | [delivery guide](https://github.com/ForgeaXGame/forgeax-engine-harness/blob/main/docs/engine/skills/forgeax-engine-sdk/references/game-delivery.md) |
 | Scripted playthrough and acceptance | `forgeax project play` in the CLI skill quick contract; edit `scripts/playthrough.mjs` |
+
+## 版本控制
+
+本工程已启用 Git，并有一个后台自动存档（见 [docs/git-autosave.md](docs/git-autosave.md)）：
+改动停下约 1 分钟后会自动提交 `autosave: ...`。回滚优先用
+`git checkout <commit> -- <path>`；不要用 `git reset --hard` 之类会改写历史或丢掉未提交改动的操作。
+自动存档的日志在 `.git/autosave.log`。
