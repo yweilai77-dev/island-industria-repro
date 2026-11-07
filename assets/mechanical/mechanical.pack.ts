@@ -195,6 +195,13 @@ export const mechanicalSystem: Plugin = {
         registry.rebuildConnections();
         registry.commitTopology();
         refreshJoints();
+        // TEMP DEBUG (remove before delivery)
+        console.log('MECH_TOPOLOGY ' + JSON.stringify({
+          revision: registry.revision,
+          parts: registry.all().map((part) => ({ id: part.id, kind: part.def.kind, cell: [part.placement.gx, part.placement.gz], rot: part.placement.rotation })),
+          connections: registry.connections(),
+          joints: views.jointCount,
+        }));
       };
 
       const rollbackPlace = (partId: number): void => {
