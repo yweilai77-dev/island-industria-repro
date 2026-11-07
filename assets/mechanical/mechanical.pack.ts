@@ -1,4 +1,5 @@
 import { Update, type EntityHandle } from '@forgeax/engine/ecs';
+import { quat } from '@forgeax/engine/math';
 import { INPUT_SNAPSHOT_RESOURCE_KEY, type InputSnapshot } from '@forgeax/engine/input';
 import { definePack } from '@forgeax/engine/pack/source';
 import { viewportToWorld } from '@forgeax/engine/picking';
@@ -53,6 +54,8 @@ export interface MechanicalService {
   parts(): readonly MechanicalPart[];
   connections(): readonly Connection[];
   partAt(cell: { gx: number; gz: number }, level: number): MechanicalPart | undefined;
+  /** 事务化的位置更新（A 阶段不暴露 G，留给 B 的搬动/旋转）。 */
+  updatePlacement(partId: number, next: Placement): boolean;
 }
 
 declare module '@forgeax/engine/plugin' {
@@ -133,11 +136,78 @@ export const mechanicalSystem: Plugin = {
         return undefined;
       };
 
+      const updateViewPlacement = (part: MechanicalPart): void => {
+        const view = views.get(part.id);
+        if (!view) return;
+        const center = placementCenter(part.placement);
+        const yaw = quat.fromAxisAngle(quat.create(), [0, 1, 0], part.placement.rotation * DEG);
+        world.set(view.root, Transform, {
+          pos: [center[0], levelBaseY(part.placement.level), center[2]],
+          quat: [yaw[0] ?? 0, yaw[1] ?? 0, yaw[2] ?? 0, yaw[3] ?? 1],
+        }).unwrap();
+      };
+
+      /**
+       * 位置更新事务：
+       * 1) 先注销旧 structure；2) 用 SpatialIndex 校验新位置；3) 更新 Registry；
+       * 4) 注册新 structure + 更新实体；5) 成功后才 commitTopology。
+       * 任一步失败恢复旧 Registry/SpatialIndex/Entity，不增加 revision。
+       */
+      const updatePlacement = (partId: number, next: Placement): boolean => {
+        const part = registry.get(partId);
+        if (!part) return false;
+        const old = part.placement;
+        spatial.structures.unregister(structureIdForPart(partId));
+        let updated = false;
+        try {
+          if (!validPlacement(part.def, next)) {
+            spatial.structures.register({
+              id: structureIdForPart(partId),
+              aabb: placementAabb(old, part.def.height),
+              blocksBuild: true,
+              blocksPlayer: true,
+            });
+            return false;
+          }
+          if (!registry.updatePlacement(partId, next)) {
+            spatial.structures.register({
+              id: structureIdForPart(partId),
+              aabb: placementAabb(old, part.def.height),
+              blocksBuild: true,
+              blocksPlayer: true,
+            });
+            return false;
+          }
+          updated = true;
+          spatial.structures.register({
+            id: structureIdForPart(partId),
+            aabb: placementAabb(next, part.def.height),
+            blocksBuild: true,
+            blocksPlayer: true,
+          });
+          updateViewPlacement({ ...part, placement: next });
+          commitTopology();
+          return true;
+        } catch (error) {
+          if (updated) registry.updatePlacement(partId, old);
+          spatial.structures.unregister(structureIdForPart(partId));
+          spatial.structures.register({
+            id: structureIdForPart(partId),
+            aabb: placementAabb(old, part.def.height),
+            blocksBuild: true,
+            blocksPlayer: true,
+          });
+          updateViewPlacement(part);
+          throw error;
+        }
+      };
+
       const service: MechanicalService = {
         get revision() { return registry.revision; },
         parts: () => registry.all(),
         connections: () => registry.connections(),
         partAt,
+        updatePlacement,
       };
 
       const selectedItem = (): ReturnType<typeof partDefForItem> => {
