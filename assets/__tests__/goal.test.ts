@@ -1,165 +1,35 @@
 import { describe, expect, it } from 'vitest';
-import type { ItemId } from '../items/items.ts';
-import type { PartId } from '../mechanical/parts.ts';
-import type { MachineBlockReason } from '../production/production.ts';
 import {
   GOAL_REQUIREMENTS,
   GOAL_STEPS,
   createGoalState,
   evaluateGoal,
-  type GoalMachineObservation,
-  type GoalNetworkObservation,
-  type GoalObservation,
-  type GoalPartObservation,
-  type GoalSnapshot,
-  type GoalSourceObservation,
-  type GoalState,
 } from '../goal/goal.ts';
+import {
+  CRUSHER,
+  FLYWHEEL,
+  FORGE,
+  SHAFT,
+  SMELTER,
+  builtMachines,
+  crusherState,
+  evaluate,
+  factory,
+  flywheel,
+  forgeState,
+  observation,
+  orderNetwork,
+  part,
+  poweredFactory,
+  producedOf,
+  smelterState,
+  stepById,
+} from './goal-fixtures.ts';
 
-// M2.0-P1-A 单元测试：八步订单状态机（纯数据快照，不依赖引擎/库存/机械运行时）。
+// M2.0-P1-A 单元测试（一）：八步订单定义、顺序锁存、动力启动与真实生产推进。
+// 与 goal-blockers.test.ts 共同保持拆分前的完整覆盖；夹具见 goal-fixtures.ts。
 
-const FLYWHEEL = 1;
-const SHAFT = 2;
-const CRUSHER = 3;
-const SMELTER = 4;
-const FORGE = 5;
-
-function part(partId: number, partKind: PartId, powered = false): GoalPartObservation {
-  return { partId, partKind, powered, stalled: false };
-}
-
-function machineState(
-  partId: number,
-  recipeId: string,
-  block: MachineBlockReason = 'ok',
-  overrides: Partial<GoalMachineObservation> = {},
-): GoalMachineObservation {
-  return {
-    partId,
-    recipeId,
-    progress: 0,
-    block,
-    inputItem: null,
-    inputCount: 0,
-    outputItem: null,
-    outputCount: 0,
-    running: block === 'ok',
-    ...overrides,
-  };
-}
-
-function crusherState(
-  block: MachineBlockReason = 'ok',
-  overrides: Partial<GoalMachineObservation> = {},
-): GoalMachineObservation {
-  return machineState(CRUSHER, 'crush-iron-ore', block, overrides);
-}
-
-function smelterState(
-  block: MachineBlockReason = 'ok',
-  overrides: Partial<GoalMachineObservation> = {},
-): GoalMachineObservation {
-  return machineState(SMELTER, 'smelt-crushed-ore', block, overrides);
-}
-
-function forgeState(
-  recipeId = 'forge-shaft',
-  block: MachineBlockReason = 'ok',
-  overrides: Partial<GoalMachineObservation> = {},
-): GoalMachineObservation {
-  return machineState(FORGE, recipeId, block, overrides);
-}
-
-function flywheel(engaged: boolean): GoalSourceObservation {
-  return { partId: FLYWHEEL, engaged, energy: engaged ? 200 : 0, energyCapacity: 300 };
-}
-
-function orderNetwork(overrides: Partial<GoalNetworkObservation> = {}): GoalNetworkObservation {
-  return {
-    id: 0,
-    status: 'powered',
-    reason: null,
-    sourceIds: [FLYWHEEL],
-    machineIds: [CRUSHER, SMELTER, FORGE],
-    partIds: [FLYWHEEL, SHAFT, CRUSHER, SMELTER, FORGE],
-    stalledPartIds: [],
-    speedFactor: 1,
-    ...overrides,
-  };
-}
-
-function observation(overrides: Partial<GoalObservation> = {}): GoalObservation {
-  return { ironOre: 0, parts: [], machines: [], sources: [], networks: [], produced: [], ...overrides };
-}
-
-function producedOf(crushedOre: number, ironIngot: number, shaft: number): GoalObservation['produced'] {
-  return [
-    { itemId: 'crushed_ore', count: crushedOre },
-    { itemId: 'iron_ingot', count: ironIngot },
-    { itemId: 'shaft', count: shaft },
-  ];
-}
-
-/** 三台机器建成，无动力源。 */
-function builtMachines(overrides: Partial<GoalObservation> = {}): GoalObservation {
-  return observation({
-    ironOre: 2,
-    parts: [part(CRUSHER, 'crusher'), part(SMELTER, 'smelter'), part(FORGE, 'forge')],
-    machines: [crusherState(), smelterState(), forgeState()],
-    networks: [orderNetwork({ sourceIds: [], status: 'idle', reason: 'no-source', speedFactor: 0 })],
-    ...overrides,
-  });
-}
-
-/** 整条产线建好但飞轮未启动。 */
-function factory(overrides: Partial<GoalObservation> = {}): GoalObservation {
-  return observation({
-    ironOre: 2,
-    parts: [
-      part(FLYWHEEL, 'flywheel_source'),
-      part(SHAFT, 'shaft'),
-      part(CRUSHER, 'crusher'),
-      part(SMELTER, 'smelter'),
-      part(FORGE, 'forge'),
-    ],
-    machines: [crusherState(), smelterState(), forgeState()],
-    sources: [flywheel(false)],
-    networks: [orderNetwork({ status: 'idle', speedFactor: 0 })],
-    ...overrides,
-  });
-}
-
-/** 整条产线自动化运行中。 */
-function poweredFactory(overrides: Partial<GoalObservation> = {}): GoalObservation {
-  return observation({
-    ironOre: 2,
-    parts: [
-      part(FLYWHEEL, 'flywheel_source', true),
-      part(SHAFT, 'shaft', true),
-      part(CRUSHER, 'crusher', true),
-      part(SMELTER, 'smelter', true),
-      part(FORGE, 'forge', true),
-    ],
-    machines: [crusherState(), smelterState(), forgeState()],
-    sources: [flywheel(true)],
-    networks: [orderNetwork()],
-    ...overrides,
-  });
-}
-
-/** 空世界基线（生产 0），对场景求值一次。 */
-function evaluate(
-  scene: GoalObservation,
-  baseline: GoalObservation = observation(),
-): { state: GoalState; snapshot: GoalSnapshot } {
-  return evaluateGoal(createGoalState(baseline), scene);
-}
-
-function stepById(snapshot: GoalSnapshot, id: string) {
-  return snapshot.steps.find((step) => step.id === id);
-}
-
-describe('M2.0-P1-A 第一份工业订单：八步状态机', () => {
+describe('M2.0-P1-A 第一份工业订单：八步进度', () => {
   it('starts at gather-ore and exposes the eight-step order definition', () => {
     const { snapshot } = evaluate(observation());
     expect(snapshot.title).toBe('第一份工业订单');
@@ -280,24 +150,6 @@ describe('M2.0-P1-A 第一份工业订单：八步状态机', () => {
     expect(started.snapshot.focusPartId).toBe(CRUSHER);
   });
 
-  it('does not latch power while the network is overloaded', () => {
-    const { state, snapshot } = evaluate(
-      poweredFactory({
-        networks: [
-          orderNetwork({
-            status: 'stalled',
-            reason: 'source-overload',
-            speedFactor: 0,
-            stalledPartIds: [CRUSHER, SMELTER, FORGE],
-          }),
-        ],
-      }),
-    );
-    expect(state.completed).not.toContain('start-power');
-    expect(snapshot.currentStep.id).toBe('start-power');
-    expect(snapshot.blocker?.code).toBe('network-overload');
-  });
-
   it('advances production steps strictly by order-start produced deltas', () => {
     const state = createGoalState(poweredFactory({ produced: producedOf(0, 0, 0) }));
     const at = (crushed: number, ingot: number, shaft: number) =>
@@ -365,131 +217,6 @@ describe('M2.0-P1-A 第一份工业订单：八步状态机', () => {
     expect(finished.snapshot.complete).toBe(true);
   });
 
-  it('keeps latched steps when power is lost (no rollback)', () => {
-    const state = createGoalState(poweredFactory());
-    const before = evaluateGoal(state, poweredFactory({ produced: producedOf(2, 0, 0) }));
-    expect(before.snapshot.currentStep.id).toBe('smelt-ingot');
-
-    const dark = evaluateGoal(
-      before.state,
-      factory({
-        produced: producedOf(2, 0, 0),
-        machines: [crusherState('no-power'), smelterState('no-power'), forgeState()],
-      }),
-    );
-    expect(dark.snapshot.currentStep.id).toBe('smelt-ingot');
-    expect(dark.snapshot.blocker?.code).toBe('no-power');
-    expect(dark.state.completed).toEqual(before.state.completed);
-  });
-
-  it('freezes progress without power and resumes from the same delta', () => {
-    const state = createGoalState(poweredFactory());
-    const one = evaluateGoal(state, poweredFactory({ produced: producedOf(1, 0, 0) }));
-    expect(one.snapshot.currentStep.progress).toEqual({ current: 1, required: 2 });
-
-    const dark = evaluateGoal(
-      one.state,
-      factory({
-        produced: producedOf(1, 0, 0),
-        machines: [crusherState('no-power'), smelterState(), forgeState()],
-      }),
-    );
-    expect(dark.snapshot.currentStep.id).toBe('crush-ore');
-    expect(dark.snapshot.currentStep.progress).toEqual({ current: 1, required: 2 });
-    expect(dark.snapshot.blocker?.code).toBe('no-power');
-
-    const resumed = evaluateGoal(dark.state, poweredFactory({ produced: producedOf(2, 0, 0) }));
-    expect(resumed.snapshot.currentStep.id).toBe('smelt-ingot');
-  });
-
-  it('reports output-full so the player takes the finished goods out', () => {
-    const state = createGoalState(poweredFactory());
-    const { snapshot } = evaluateGoal(
-      state,
-      poweredFactory({
-        machines: [
-          crusherState('output-full', { outputItem: 'crushed_ore', outputCount: 4 }),
-          smelterState(),
-          forgeState(),
-        ],
-      }),
-    );
-    expect(snapshot.currentStep.id).toBe('crush-ore');
-    expect(snapshot.blocker?.code).toBe('output-full');
-    expect(snapshot.blocker?.message).toContain('取出成品');
-  });
-
-  it('reports no-input when the machine lacks material', () => {
-    const state = createGoalState(poweredFactory());
-    const { snapshot } = evaluateGoal(
-      state,
-      poweredFactory({ machines: [crusherState('no-input'), smelterState(), forgeState()] }),
-    );
-    expect(snapshot.currentStep.id).toBe('crush-ore');
-    expect(snapshot.blocker?.code).toBe('no-input');
-    expect(snapshot.blocker?.message).toContain('铁矿石');
-  });
-
-  it('reports network-overload when the production network is stalled', () => {
-    const state = createGoalState(poweredFactory());
-    const started = evaluateGoal(state, poweredFactory({ produced: producedOf(0, 0, 0) }));
-    const { snapshot } = evaluateGoal(
-      started.state,
-      poweredFactory({
-        produced: producedOf(0, 0, 0),
-        networks: [orderNetwork({ status: 'stalled', reason: 'branch-overload', speedFactor: 0 })],
-        machines: [crusherState('no-power'), smelterState('no-power'), forgeState('no-power')],
-      }),
-    );
-    expect(snapshot.currentStep.id).toBe('crush-ore');
-    expect(snapshot.blocker?.code).toBe('network-overload');
-  });
-
-  it('reports wrong-recipe when the forge is set to another recipe', () => {
-    const state = createGoalState(poweredFactory());
-    const { snapshot } = evaluateGoal(
-      state,
-      poweredFactory({
-        produced: producedOf(2, 2, 0),
-        machines: [crusherState(), smelterState(), forgeState('forge-vertical-drive')],
-      }),
-    );
-    expect(snapshot.currentStep.id).toBe('forge-shaft');
-    expect(snapshot.blocker?.code).toBe('wrong-recipe');
-    expect(snapshot.blocker?.message).toContain('锻压传动轴');
-  });
-
-  it('asks to rebuild a dismantled machine without faking completion', () => {
-    const builtOnly = evaluate(builtMachines());
-    expect(builtOnly.snapshot.currentStep.id).toBe('connect-power');
-    const dismantled = evaluateGoal(builtOnly.state, observation({ ironOre: 2 }));
-    expect(dismantled.snapshot.currentStep.id).toBe('connect-power');
-    expect(dismantled.snapshot.blocker?.code).toBe('missing-machine');
-    expect(dismantled.snapshot.complete).toBe(false);
-
-    const state = createGoalState(poweredFactory());
-    const ready = evaluateGoal(state, poweredFactory({ produced: producedOf(2, 2, 0) }));
-    expect(ready.snapshot.currentStep.id).toBe('forge-shaft');
-    const noForge = evaluateGoal(
-      ready.state,
-      poweredFactory({
-        produced: producedOf(2, 2, 0),
-        parts: [
-          part(FLYWHEEL, 'flywheel_source', true),
-          part(SHAFT, 'shaft', true),
-          part(CRUSHER, 'crusher', true),
-          part(SMELTER, 'smelter', true),
-        ],
-        machines: [crusherState(), smelterState()],
-        networks: [orderNetwork({ machineIds: [CRUSHER, SMELTER], partIds: [FLYWHEEL, SHAFT, CRUSHER, SMELTER] })],
-      }),
-    );
-    expect(noForge.snapshot.currentStep.id).toBe('forge-shaft');
-    expect(noForge.snapshot.blocker?.code).toBe('missing-machine');
-    expect(noForge.snapshot.blocker?.message).toContain('锻压机');
-    expect(noForge.snapshot.complete).toBe(false);
-  });
-
   it('completes once and never re-triggers', () => {
     const state = createGoalState(poweredFactory());
     const done = evaluateGoal(state, poweredFactory({ produced: producedOf(2, 2, 1) }));
@@ -525,5 +252,4 @@ describe('M2.0-P1-A 第一份工业订单：八步状态机', () => {
     expect(evaluate(factory()).snapshot.focusPartId).toBe(FLYWHEEL);
     expect(evaluate(poweredFactory()).snapshot.focusPartId).toBe(CRUSHER);
   });
-
 });
