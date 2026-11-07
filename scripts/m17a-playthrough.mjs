@@ -39,9 +39,10 @@ export default async function playthrough(play) {
     await place('Digit5', [0.325, 0.772], 'machine');
     await place('Digit3', [0.255, 0.772], 'gear24');
     await play.screenshot('02-connected-layout-with-ghost');
-    // 退出机械模式，去掉幽灵后再截一张纯结构图（连接接头可见）。
-    await play.keyboard.press('Digit6');
-    await play.wait(300);
+    // 选中机械物品但把鼠标移到天空，隐藏放置幽灵，再截一张纯结构图（连接接头可见）。
+    await play.keyboard.press('Digit1');
+    await play.mouse.move([0.05, 0.05]);
+    await play.wait(350);
     await play.screenshot('02-connected-layout');
     await play.keyboard.press('Digit1');
     await play.wait(200);
@@ -106,9 +107,10 @@ export default async function playthrough(play) {
     console.log('AFTER_BLOCKER=' + JSON.stringify(afterPlace));
     assert(afterPlace.reduce((sum, value) => sum + value, 0) === before.reduce((sum, value) => sum + value, 0) - 3,
       'blocker wall should consume three shafts: ' + JSON.stringify({ before, afterPlace }));
-    // 退出机械模式，避免幽灵遮挡。
-    await play.keyboard.press('Digit6');
-    await play.wait(250);
+    // 选中机械物品、鼠标移到天空，避免放置幽灵遮挡。
+    await play.keyboard.press('Digit1');
+    await play.mouse.move([0.05, 0.05]);
+    await play.wait(350);
     await play.screenshot('05-before-walk');
     await play.keyboard.hold('KeyW', 1500);
     await play.wait(350);

@@ -116,6 +116,8 @@ export const mechanicalSystem: Plugin = {
           inventory.add(definition.itemId, PROTOTYPE_KIT[id]);
           hotbar.bind(index, definition.itemId);
         });
+        // 默认选中空槽，保留 M1.5 的普通建造默认行为；按 1-5 进入机械模式。
+        hotbar.select(5);
         world.insertResource(KIT_GRANTED_KEY, 1);
       };
       grantKit();
@@ -195,13 +197,6 @@ export const mechanicalSystem: Plugin = {
         registry.rebuildConnections();
         registry.commitTopology();
         refreshJoints();
-        // TEMP DEBUG (remove before delivery)
-        console.log('MECH_TOPOLOGY ' + JSON.stringify({
-          revision: registry.revision,
-          parts: registry.all().map((part) => ({ id: part.id, kind: part.def.kind, cell: [part.placement.gx, part.placement.gz], rot: part.placement.rotation })),
-          connections: registry.connections(),
-          joints: views.jointCount,
-        }));
       };
 
       const rollbackPlace = (partId: number): void => {
@@ -216,6 +211,7 @@ export const mechanicalSystem: Plugin = {
         const part: MechanicalPart = { id: partId, def: definition, placement };
         let registered = false;
         let viewAdded = false;
+        let consumed = false;
         try {
           if (!registry.add(part)) return false;
           spatial.structures.register({
@@ -231,9 +227,11 @@ export const mechanicalSystem: Plugin = {
             rollbackPlace(partId);
             return false;
           }
+          consumed = true;
           commitTopology();
           return true;
         } catch (error) {
+          if (consumed) inventory.add(definition.itemId, 1);
           if (registered || viewAdded) rollbackPlace(partId);
           throw error;
         }
