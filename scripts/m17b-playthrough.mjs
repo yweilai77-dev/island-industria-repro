@@ -164,7 +164,9 @@ export default async function playthrough(play) {
     await place('Digit2', [0.527, 0.416], 'gear');
     await play.keyboard.press('Digit1');
     await clearHover();
+    await hoverAndRightClick([0.48, 0.39]);
     const s = await read('GEAR_COMPONENT');
+    assert(s.sources[0]?.enabled === true, 'source must be running before checking the gear chain');
     assert(s.networks.some((n) => n.status === 'powered'),
       'gear component must be powered after M1.7-C');
     assert(s.machines[0]?.powered === true, 'gear driven machine must run');

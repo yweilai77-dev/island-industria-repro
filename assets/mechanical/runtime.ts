@@ -46,7 +46,8 @@ export const mechanicalRuntime: Plugin = {
       const readoutStatus = (partId: number): ReadoutStatus => {
         if (state.isStalled(partId)) return 'stalled';
         if (state.omegaOf(partId) === 0) return 'idle';
-        return state.speedFactorOf(partId) >= 0.999 ? 'running' : 'slowed';
+        // 转速因子 ≥ 0.75 视为正常运转（绿），被负载明显拖慢时转琥珀。
+        return state.speedFactorOf(partId) >= 0.75 ? 'running' : 'slowed';
       };
 
       world.addSystem(Update, {
