@@ -264,9 +264,10 @@ export const mechanicalSystem: Plugin = {
       };
 
       const commitTopology = (): void => {
+        // 先重建连接和接头，只有全部成功后才增加 revision。
         registry.rebuildConnections();
-        registry.commitTopology();
         refreshJoints();
+        registry.commitTopology();
       };
 
       const rollbackPlace = (partId: number): void => {
