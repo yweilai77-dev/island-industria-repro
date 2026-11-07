@@ -318,6 +318,7 @@ export const mechanicalSystem: Plugin = {
           const inMode = definition !== undefined;
           if (!inMode) {
             setGhost(undefined, undefined, false);
+            hideGhost(selection);
             selectedPartId = undefined;
             return;
           }
@@ -325,6 +326,7 @@ export const mechanicalSystem: Plugin = {
           if (input.keyboard.justPressedCode('Escape')) {
             selectedPartId = undefined;
             setGhost(undefined, undefined, false);
+            hideGhost(selection);
             return;
           }
           if (input.keyboard.justPressedCode('Delete') || input.keyboard.justPressedCode('Backspace')) {
@@ -338,19 +340,23 @@ export const mechanicalSystem: Plugin = {
           const cameraTarget = ray && level !== undefined ? pickSupportTarget(ray, level, spatial.supports) : undefined;
           const placement = level !== undefined && cameraTarget ? placementFor(cameraTarget, level) : undefined;
           const hoverPart = hitPart(ray);
+          if (hoverPart !== undefined) {
+            // 悬停在已有零件上：进入选择模式，不显示放置幽灵。
+            setGhost(undefined, undefined, false);
+            if (input.mouse.justPressed(0)) selectedPartId = hoverPart;
+            showSelection(registry.get(selectedPartId ?? hoverPart));
+            return;
+          }
           if (placement) {
             const valid = validPlacement(definition, placement);
             setGhost(definition, placement, valid);
-            if (input.mouse.justPressed(0)) {
-              if (hoverPart !== undefined) {
-                selectedPartId = hoverPart;
-              } else if (valid) {
-                place(definition, placement);
-              }
+            showSelection(selectedPartId === undefined ? undefined : registry.get(selectedPartId));
+            if (input.mouse.justPressed(0) && valid) {
+              place(definition, placement);
             }
           } else {
             setGhost(undefined, undefined, false);
-            if (input.mouse.justPressed(0) && hoverPart !== undefined) selectedPartId = hoverPart;
+            showSelection(selectedPartId === undefined ? undefined : registry.get(selectedPartId));
           }
         },
       }).unwrap();

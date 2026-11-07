@@ -38,7 +38,13 @@ export default async function playthrough(play) {
     await place('Digit2', [0.298, 0.716], 'gear12');
     await place('Digit5', [0.325, 0.772], 'machine');
     await place('Digit3', [0.255, 0.772], 'gear24');
+    await play.screenshot('02-connected-layout-with-ghost');
+    // 退出机械模式，去掉幽灵后再截一张纯结构图（连接接头可见）。
+    await play.keyboard.press('Digit6');
+    await play.wait(300);
     await play.screenshot('02-connected-layout');
+    await play.keyboard.press('Digit1');
+    await play.wait(200);
     const counts = await readCounts();
     console.log('LAYOUT=' + JSON.stringify(counts));
     assert(counts[0] === 22 && counts[1] === 5 && counts[2] === 3 && counts[3] === 1 && counts[4] === 4,
@@ -54,18 +60,21 @@ export default async function playthrough(play) {
     await play.screenshot('03-selected');
     await play.mouse.click([0.272, 0.665]);
     await play.wait(250);
+    const before = await readCounts();
     await play.keyboard.press('Delete');
     await play.wait(450);
     await play.screenshot('03-after-delete');
     const counts = await readCounts();
+    const beforeTotal = before.reduce((sum, value) => sum + value, 0);
+    const afterTotal = counts.reduce((sum, value) => sum + value, 0);
     console.log('AFTER_DELETE=' + JSON.stringify(counts));
-    assert(counts[0] === 23, 'delete must refund exactly one shaft: ' + JSON.stringify(counts));
+    assert(afterTotal === beforeTotal + 1, 'delete must refund exactly one mechanical item: ' + JSON.stringify({ before, counts }));
     // 再按一次 Delete：没有选中目标，不产生第二次返还。
     await play.keyboard.press('Delete');
     await play.wait(300);
     const again = await readCounts();
     console.log('AFTER_DOUBLE_DELETE=' + JSON.stringify(again));
-    assert(again[0] === 23, 'double delete must not refund twice: ' + JSON.stringify(again));
+    assert(again.reduce((sum, value) => sum + value, 0) === afterTotal, 'double delete must not refund twice: ' + JSON.stringify(again));
     await play.screenshot('03-after-double-delete');
   });
 
