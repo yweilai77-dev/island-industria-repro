@@ -54,8 +54,8 @@ export default async function playthrough(play) {
   });
 
   await play.step('02-nw-edge', async () => {
-    await walk(8.0); // 初始 yaw 45°：-X/-Z，一路夹到西北角 (-15.5,-15.5)
-    await walk(0.6); // 额外推，证明边界夹紧
+    await walk(32.0); // 初始 yaw 45°：-X/-Z，一路夹到西北角 (-15.5,-15.5)
+    await walk(2.0); // 额外推，证明边界夹紧
     await play.screenshot('02-nw-edge');
     console.log('FPS_EDGE=' + (await fps()));
   });
@@ -71,10 +71,10 @@ export default async function playthrough(play) {
 
   await play.step('04-node-d', async () => {
     await face(4); // +Z，先夹到 z=15.5
-    await walk(6.0);
-    await face(6); // +X，夹到 x=15.5 附近再回来
-    await walk(6.0);
-    // 现在大致 (10.5, 15.5)：向 -X 不必要；直接 -Z 到 z=10.5
+    await walk(22.5);
+    await face(6); // +X
+    await walk(23.0); // x≈10.5
+    // 现在大致 (10.5, 15.5)；直接 -Z 到 z=10.5
     await face(0); // -Z
     await walk(5.0);
     await play.screenshot('04-node-d');
@@ -131,9 +131,9 @@ export default async function playthrough(play) {
 
   await play.step('08-se-corner', async () => {
     await face(4); // +Z，先到 z=15.5
-    await walk(3.2);
+    await walk(12.0);
     await face(6); // +X，到 x=15.5（东南角）
-    await walk(6.0);
+    await walk(22.0);
     await play.screenshot('13-se-corner');
     // 1×1 合法放置（瞄准玩家前方内侧地面）
     await play.mouse.move([0.5, 0.66]);
