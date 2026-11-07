@@ -36,7 +36,7 @@ export default async function playthrough(play) {
     await play.wait(250);
   };
   const clearHover = async () => {
-    await play.mouse.move([0.5, 0.03]);
+    await play.mouse.move([0.05, 0.05]);
     await play.wait(350);
   };
 
