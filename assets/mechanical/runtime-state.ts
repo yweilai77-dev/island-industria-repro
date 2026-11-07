@@ -39,6 +39,13 @@ export interface MechanicalSnapshot {
     readonly partId: number;
     readonly kind: string;
     readonly componentId: number | null;
+    /** 真实放置信息，供外部验收脚本核对落格。 */
+    readonly placement: {
+      readonly gx: number;
+      readonly gz: number;
+      readonly level: number;
+      readonly rotation: number;
+    };
     readonly omega: number;
     readonly rpm: number;
     readonly angle: number;
@@ -265,6 +272,12 @@ export class MechanicalRuntimeState {
           partId: part.id,
           kind: part.def.kind,
           componentId: topology.componentByPart.get(part.id) ?? null,
+          placement: {
+            gx: part.placement.gx,
+            gz: part.placement.gz,
+            level: part.placement.level,
+            rotation: part.placement.rotation,
+          },
           omega,
           rpm: toRpm(omega),
           angle: this.angleOf(part.id),

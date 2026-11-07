@@ -109,41 +109,41 @@ export default async function playthrough(play) {
     assert(await setSourceEnabled(SOURCE_HOVER, true), 'right-click must enable the source');
     const s = await read('BRANCH_OVERLOAD');
     assert(s.networks[0]?.status === 'powered', 'network must stay powered, got ' + s.networks[0]?.status);
+    // 放置顺序：1 源、2/3 轴、4 驱动 12T、5 B 支路 24T、6 B 支路机器、
+    //          7 A 支路 24T、8 A 支路直驱机器、9 A 支路 12T、10 A 支路啮合机器。
     const byId = new Map(s.machines.map((machine) => [machine.partId, machine]));
-    // A 支路：直驱机器与啮合机器都被停掉。
-    assert(byId.get(6)?.stalled === true && byId.get(6)?.powered === false,
-      'branch A direct machine must stall: ' + JSON.stringify(byId.get(6)));
     assert(byId.get(8)?.stalled === true && byId.get(8)?.powered === false,
-      'branch A meshed machine must stall: ' + JSON.stringify(byId.get(8)));
-    // B 支路继续运行。
-    assert(byId.get(10)?.powered === true, 'branch B machine must keep running');
+      'branch A direct machine must stall: ' + JSON.stringify(byId.get(8)));
+    assert(byId.get(10)?.stalled === true && byId.get(10)?.powered === false,
+      'branch A meshed machine must stall: ' + JSON.stringify(byId.get(10)));
+    assert(byId.get(6)?.powered === true, 'branch B machine must keep running');
     // 公共上游没有被停：源开启、网络 powered、上游齿轮不在 stalledPartIds。
-    assert(s.networks[0].stalledPartIds.includes(5), 'branch A 24T gear must be stalled');
+    assert(s.networks[0].stalledPartIds.includes(7), 'branch A 24T gear must be stalled');
     assert(!s.networks[0].stalledPartIds.includes(4), 'common upstream 12T gear must not stall');
     assert(Math.abs(s.networks[0].demandTorque - 10) < 1,
       'after branch A stalls the source only carries branch B (10 N·m), got ' + s.networks[0].demandTorque);
-    const angleA = byId.get(6).angle;
-    const angleB = byId.get(10).angle;
+    const angleA = byId.get(8).angle;
+    const angleB = byId.get(6).angle;
     await play.advance(0.5);
     const moved = await snapshot();
-    const a2 = moved.machines.find((machine) => machine.partId === 6);
-    const b2 = moved.machines.find((machine) => machine.partId === 10);
+    const a2 = moved.machines.find((machine) => machine.partId === 8);
+    const b2 = moved.machines.find((machine) => machine.partId === 6);
     assert(a2.angle === angleA, 'branch A machine angle must freeze');
     assert(b2.angle !== angleB, 'branch B machine must keep moving');
     await play.mouse.move([0.283, 0.775]);
     await play.wait(300);
     await play.screenshot('03-branch-overload-run');
     // 悬停 A 支路机器，读数应显示 BRANCH OVERLOAD。
-    await play.mouse.move([0.368, 0.66]);
+    await play.mouse.move([0.365, 0.69]);
     await play.wait(300);
     await play.screenshot('03-branch-overload-readout');
   });
 
   await play.step('04-drop-branch-a-load-and-recover', async () => {
     const before = await read('BEFORE_RECOVER');
-    const angleB = before.machines.find((machine) => machine.partId === 10).angle;
-    // 拆掉 A 支路直驱机器：A 的 24T 负载 60 → 40 ≤ 50，恢复。
-    await deletePart([[0.368, 0.66], [0.368, 0.716]], 9, 'branch A direct machine');
+    const angleB = before.machines.find((machine) => machine.partId === 6).angle;
+    // 拆掉 A 支路直驱机器（id 8，位于 (-2,6)）：A 的 24T 负载 60 → 40 ≤ 50，恢复。
+    await deletePart([[0.365, 0.69], [0.365, 0.7165]], 9, 'branch A direct machine');
     const after = await read('AFTER_RECOVER');
     assert(after.parts.length === 9, 'one part should be removed, got ' + after.parts.length);
     assert(after.machines.length === 2, 'two machines should remain, got ' + after.machines.length);
@@ -151,14 +151,18 @@ export default async function playthrough(play) {
     assert(after.networks[0]?.stalledPartIds.length === 0,
       'no part should stay stalled, got ' + JSON.stringify(after.networks[0]?.stalledPartIds));
     assert(after.machines.every((machine) => machine.powered === true), 'all remaining machines must run');
-    assert(Math.abs(after.networks[0].demandTorque - 40) < 1,
-      'source demand should return to 40 N·m, got ' + after.networks[0].demandTorque);
-    const angleA = after.machines.find((machine) => machine.partId === 8).angle;
+    // A 支路恢复后：A 24T 承载 40，折算到驱动 12T 为 20；B 支路折算 10；合计 30。
+    assert(Math.abs(after.networks[0].demandTorque - 30) < 1,
+      'source demand should return to 30 N·m, got ' + after.networks[0].demandTorque);
+    assert(Math.abs(after.networks[0].speedFactor - 0.7) < 0.02,
+      'speed factor should be 0.7, got ' + after.networks[0].speedFactor);
+    const angleA = after.machines.find((machine) => machine.partId === 10).angle;
     await play.advance(0.4);
     const moving = await snapshot();
-    assert(moving.machines.find((machine) => machine.partId === 8).angle > angleA,
+    // 支路可能反向旋转（24T 从动），这里只断言"相位继续变化"，不假设正方向。
+    assert(Math.abs(moving.machines.find((machine) => machine.partId === 10).angle - angleA) > 1e-3,
       'branch A machine must resume after the load drops');
-    assert(moving.machines.find((machine) => machine.partId === 10).angle > angleB,
+    assert(Math.abs(moving.machines.find((machine) => machine.partId === 6).angle - angleB) > 1e-3,
       'branch B machine must never freeze across the whole sequence');
     await play.mouse.move([0.283, 0.775]);
     await play.wait(300);
