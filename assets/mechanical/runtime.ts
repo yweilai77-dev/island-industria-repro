@@ -1,39 +1,60 @@
 import { Time, Update } from '@forgeax/engine/ecs';
 import { INPUT_SNAPSHOT_RESOURCE_KEY, type InputSnapshot } from '@forgeax/engine/input';
 import type { Plugin } from '@forgeax/engine/plugin';
-import { PROPAGATE_TRANSFORMS_SYSTEM } from '@forgeax/engine/scene';
+import { PROPAGATE_TRANSFORMS_SYSTEM, Transform } from '@forgeax/engine/scene';
 import type { GameProjectionValue } from '@forgeax/engine/app';
+import type {} from '@forgeax/engine/assets-runtime';
+import { placementCenter } from '../grid/grid.ts';
 import type {} from '../hotbar/hotbar.ts';
 import { isMechanicalItem } from '../items/items.ts';
+import { resolveSceneEntity } from '../shared/scene-refs.ts';
 import { applyMachinePose, applySpin } from './animation.ts';
 import type { MechanicalService } from './mechanical.pack.ts';
+import { createMechanicalReadout, type ReadoutStatus } from './readout.ts';
 import { MechanicalRuntimeState, sourceToggleTarget } from './runtime-state.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 
 /**
- * M1.7-B runtime：
+ * M1.7-C runtime：
  * - 右键启停（悬停动力源优先，选中动力源兜底）；
  * - 只读 GameRead 投影；
  * - 每帧只做 revision 同步、必要解算、角度积分和 Transform 写入；
- * - 不创建/销毁实体，不修改 Registry/SpatialIndex/Inventory。
+ * - 选中/悬停零件上方显示最小机械读数（RPM + 状态色）；
+ * - 不创建/销毁机械实体，不修改 Registry/SpatialIndex/Inventory（读数牌是纯视图实体）。
  */
 export const mechanicalRuntime: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'mechanical', 'hotbar', 'gameHost'],
+  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene'],
   apply(ctx) {
     const world = ctx.world;
     const mechanical = ctx.mechanical;
     const hotbar = ctx.hotbar;
+    const assets = ctx.assets;
+    if (!assets) throw new Error('mechanical runtime requires asset service');
+    const camera = resolveSceneEntity(world, ctx.gameScene, 'camera');
 
     ctx.effect(function* () {
       const state = new MechanicalRuntimeState();
+      const readout = createMechanicalReadout(world, assets, camera);
       const unregisterRead = ctx.gameHost?.gameProjection?.registerRead({
         id: 'mechanical',
         title: 'Mechanical state',
         read: () => state.snapshot() as unknown as GameProjectionValue,
       });
       yield () => unregisterRead?.();
+
+      const cameraPosition = (): readonly [number, number, number] | undefined => {
+        const result = world.get(camera, Transform);
+        if (!result.ok) return undefined;
+        return result.value.pos as unknown as readonly [number, number, number];
+      };
+
+      const readoutStatus = (partId: number): ReadoutStatus => {
+        if (state.isStalled(partId)) return 'stalled';
+        if (state.omegaOf(partId) === 0) return 'idle';
+        return state.speedFactorOf(partId) >= 0.999 ? 'running' : 'slowed';
+      };
 
       world.addSystem(Update, {
         name: SYSTEM_NAME,
@@ -63,11 +84,30 @@ export const mechanicalRuntime: Plugin = {
               applyMachinePose(world, view, state.poseOf(part.id));
             }
           }
+
+          const targetId = mechanical.selectedPartId() ?? mechanical.hoveredPartId();
+          const targetPart = targetId === undefined ? undefined : parts.find((part) => part.id === targetId);
+          if (targetPart === undefined) {
+            readout.update(undefined, undefined);
+            return;
+          }
+          const center = placementCenter(targetPart.placement);
+          readout.update(
+            {
+              x: center[0],
+              y: center[1] + targetPart.def.height,
+              z: center[2],
+              omega: state.omegaOf(targetPart.id),
+              status: readoutStatus(targetPart.id),
+            },
+            cameraPosition(),
+          );
         },
       }).unwrap();
 
       yield () => {
         world.removeSystem(Update, SYSTEM_NAME).unwrap();
+        readout.dispose();
         state.clear();
       };
     }, SYSTEM_NAME);

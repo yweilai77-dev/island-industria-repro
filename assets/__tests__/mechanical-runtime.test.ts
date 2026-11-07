@@ -40,7 +40,8 @@ describe('M1.7-B runtime state', () => {
     const running = state.snapshot();
     expect(running.networks[0]?.status).toBe('powered');
     expect(running.machines[0]?.powered).toBe(true);
-    expect(running.parts.find((p) => p.partId === 2)?.omega).toBeCloseTo(Math.PI * 2, 12);
+    // 冲压机负载 20 把 60 RPM 压到 48 RPM（2π × 0.8）。
+    expect(running.parts.find((p) => p.partId === 2)?.omega).toBeCloseTo(Math.PI * 1.6, 12);
     const runningAngle = running.machines[0]!.angle;
     const runningRam = running.machines[0]!.ramY;
 

@@ -30,8 +30,11 @@ export interface MechanicalPartDef {
   readonly d: number;
   readonly height: number;
   readonly teeth?: number;
+  /** 承载能力（N·m）。传动件上通过的扭矩超过它，该支路停止。 */
   readonly maxTorque: number;
-  /** 动力源额定转速（RPM）；B 阶段只给测试动力源使用。 */
+  /** 机器运转时消耗的扭矩（N·m）；只有 machine 使用，缺省视为 0。 */
+  readonly loadTorque?: number;
+  /** 动力源额定转速（RPM）；无负载时的输出转速。 */
   readonly ratedRpm?: number;
   readonly ports: readonly PartPortDef[];
 }
@@ -54,6 +57,19 @@ export const MECH_PART_HEIGHT = 1;
 export const PORT_HEIGHT = 0.5;
 export const GEAR_TEETH_SMALL = 12;
 export const GEAR_TEETH_LARGE = 24;
+
+/**
+ * M1.7-C 扭矩标定（N·m）。三个角色分开，才能同时演示三条规则：
+ * - 动力源 100：整网负载 ≥ 100 时整个网络过载停止；
+ * - 传动轴 150：干线不先于动力源失效，让总负载先压到动力源；
+ * - 齿轮 50：齿轮是薄弱环节，单条支路负载 > 50 只停这条支路；
+ * - 冲压机负载 20：1 / 2 / 3 台分别把网络压到 80% / 60% / 40% 转速，5 台整网停止。
+ */
+export const TORQUE_SOURCE = 100;
+export const TORQUE_SHAFT = 150;
+export const TORQUE_GEAR = 50;
+export const TORQUE_MACHINE = 50;
+export const MACHINE_LOAD = 20;
 
 /** SpatialIndex / StructureRegistry 的机械 structure 公开 ID。 */
 export const MECH_STRUCTURE_PREFIX = 'mech:';
@@ -90,7 +106,7 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     w: 1,
     d: 1,
     height: MECH_PART_HEIGHT,
-    maxTorque: 50,
+    maxTorque: TORQUE_SHAFT,
     ports: SHAFT_PORTS,
   },
   gear_12: {
@@ -102,7 +118,7 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     d: 1,
     height: MECH_PART_HEIGHT,
     teeth: GEAR_TEETH_SMALL,
-    maxTorque: 50,
+    maxTorque: TORQUE_GEAR,
     ports: gearPorts(),
   },
   gear_24: {
@@ -114,7 +130,7 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     d: 1,
     height: MECH_PART_HEIGHT,
     teeth: GEAR_TEETH_LARGE,
-    maxTorque: 50,
+    maxTorque: TORQUE_GEAR,
     ports: gearPorts(),
   },
   power_source: {
@@ -125,7 +141,7 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     w: 1,
     d: 1,
     height: MECH_PART_HEIGHT,
-    maxTorque: 60,
+    maxTorque: TORQUE_SOURCE,
     ratedRpm: 60,
     ports: [
       { id: 'out', role: 'output', axis: 'x', face: 'px', localCell: { gx: 0, gz: 0 }, localY: PORT_HEIGHT },
@@ -139,7 +155,8 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     w: 1,
     d: 1,
     height: MECH_PART_HEIGHT,
-    maxTorque: 50,
+    maxTorque: TORQUE_MACHINE,
+    loadTorque: MACHINE_LOAD,
     ports: [
       { id: 'in', role: 'input', axis: 'x', face: 'nx', localCell: { gx: 0, gz: 0 }, localY: PORT_HEIGHT },
     ],

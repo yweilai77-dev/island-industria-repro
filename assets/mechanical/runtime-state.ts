@@ -26,22 +26,36 @@ export interface MechanicalSnapshot {
     readonly sourceIds: readonly number[];
     readonly machineIds: readonly number[];
     readonly partIds: readonly number[];
+    /** 被局部/整体过载停转的零件。 */
+    readonly stalledPartIds: readonly number[];
+    /** 1 = 额定转速；0 = 停转。 */
+    readonly speedFactor: number;
+    /** 折算到动力源轴上的总需求扭矩（N·m）。 */
+    readonly demandTorque: number;
+    /** 动力源承载能力（N·m）。 */
+    readonly capacityTorque: number;
   }[];
   readonly parts: readonly {
     readonly partId: number;
     readonly kind: string;
     readonly componentId: number | null;
     readonly omega: number;
+    readonly rpm: number;
     readonly angle: number;
     readonly powered: boolean;
+    readonly torque: number;
+    readonly stalled: boolean;
   }[];
   readonly machines: readonly {
     readonly partId: number;
     readonly powered: boolean;
+    readonly stalled: boolean;
     readonly omega: number;
+    readonly rpm: number;
     readonly angle: number;
     readonly ramY: number;
     readonly rodAngle: number;
+    readonly loadTorque: number;
   }[];
 }
 
@@ -62,6 +76,17 @@ export function sourceToggleTarget(
 
 function rpmOf(part: MechanicalPart): number {
   return part.def.ratedRpm ?? 60;
+}
+
+const TAU = Math.PI * 2;
+
+/** 角速度（rad/s）→ 每分钟转数。 */
+function toRpm(omega: number): number {
+  return (omega * 60) / TAU;
+}
+
+function loadOf(part: MechanicalPart): number {
+  return part.def.loadTorque ?? 0;
 }
 
 /**
@@ -148,18 +173,53 @@ export class MechanicalRuntimeState {
     return this.machinePoses.get(partId) ?? machinePose(this.angleOf(partId));
   }
 
-  step(deltaSeconds: number): void {
-    if (!this.topologyCache) return;
-    const dt = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds, 0.1)) : 0;
+  /** 取得（必要时解算）当前动力解；没有拓扑时返回 null。 */
+  private ensureSolution(): PowerSolution | null {
+    if (!this.topologyCache) return null;
     if (this.solutionDirty || !this.solutionCache) {
       const enabled = new Set<number>();
       for (const [partId, value] of this.sourceEnabled) if (value) enabled.add(partId);
       this.solutionCache = solvePower(this.topologyCache, this.parts, enabled);
       this.solutionDirty = false;
     }
+    return this.solutionCache;
+  }
+
+  /** 零件所在动力网络（已解算状态）；未参与网络时 undefined。 */
+  componentOf(partId: number): PowerComponent | undefined {
+    const topology = this.topologyCache;
+    const solution = this.ensureSolution();
+    if (!topology || !solution) return undefined;
+    const index = topology.componentByPart.get(partId);
+    if (index === undefined) return undefined;
+    return solution.components[index];
+  }
+
+  omegaOf(partId: number): number {
+    return this.ensureSolution()?.omegaByPart.get(partId) ?? 0;
+  }
+
+  torqueOf(partId: number): number {
+    return this.ensureSolution()?.torqueByPart.get(partId) ?? 0;
+  }
+
+  isStalled(partId: number): boolean {
+    return this.ensureSolution()?.stalledParts.has(partId) ?? false;
+  }
+
+  speedFactorOf(partId: number): number {
+    const component = this.componentOf(partId);
+    if (!component) return 0;
+    return this.ensureSolution()?.speedFactorByComponent.get(component.id) ?? 0;
+  }
+
+  step(deltaSeconds: number): void {
+    const solution = this.ensureSolution();
+    if (!solution) return;
+    const dt = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds, 0.1)) : 0;
 
     for (const part of this.parts) {
-      const omega = this.solutionCache.omegaByPart.get(part.id) ?? 0;
+      const omega = solution.omegaByPart.get(part.id) ?? 0;
       const angle = this.angleOf(part.id) + omega * dt;
       this.angles.set(part.id, angle);
       if (part.def.kind === 'machine') this.machinePoses.set(part.id, machinePose(angle));
@@ -168,7 +228,8 @@ export class MechanicalRuntimeState {
 
   snapshot(): MechanicalSnapshot {
     const topology = this.topologyCache;
-    if (!topology) {
+    const solution = this.ensureSolution();
+    if (!topology || !solution) {
       return {
         revision: this.revision < 0 ? 0 : this.revision,
         sources: [],
@@ -176,12 +237,6 @@ export class MechanicalRuntimeState {
         parts: [],
         machines: [],
       };
-    }
-    let solution = this.solutionCache;
-    if (!solution) {
-      const enabled = new Set<number>();
-      for (const [partId, value] of this.sourceEnabled) if (value) enabled.add(partId);
-      solution = solvePower(topology, this.parts, enabled);
     }
 
     const sources = this.parts
@@ -196,31 +251,45 @@ export class MechanicalRuntimeState {
       sourceIds: [...component.sourceIds],
       machineIds: [...component.machineIds],
       partIds: [...component.partIds],
+      stalledPartIds: component.partIds.filter((partId) => solution.stalledParts.has(partId)),
+      speedFactor: solution.speedFactorByComponent.get(component.id) ?? 0,
+      demandTorque: solution.demandByComponent.get(component.id) ?? 0,
+      capacityTorque: solution.capacityByComponent.get(component.id) ?? 0,
     }));
 
     const parts = [...this.parts]
       .sort((a, b) => a.id - b.id)
-      .map((part) => ({
-        partId: part.id,
-        kind: part.def.kind,
-        componentId: topology.componentByPart.get(part.id) ?? null,
-        omega: solution!.omegaByPart.get(part.id) ?? 0,
-        angle: this.angleOf(part.id),
-        powered: solution!.omegaByPart.has(part.id),
-      }));
+      .map((part) => {
+        const omega = solution.omegaByPart.get(part.id) ?? 0;
+        return {
+          partId: part.id,
+          kind: part.def.kind,
+          componentId: topology.componentByPart.get(part.id) ?? null,
+          omega,
+          rpm: toRpm(omega),
+          angle: this.angleOf(part.id),
+          powered: solution.omegaByPart.has(part.id),
+          torque: solution.torqueByPart.get(part.id) ?? 0,
+          stalled: solution.stalledParts.has(part.id),
+        };
+      });
 
     const machines = this.parts
       .filter((part) => part.def.kind === 'machine')
       .sort((a, b) => a.id - b.id)
       .map((part) => {
         const pose = this.poseOf(part.id);
+        const omega = solution.omegaByPart.get(part.id) ?? 0;
         return {
           partId: part.id,
-          powered: solution!.poweredMachines.has(part.id),
-          omega: solution!.omegaByPart.get(part.id) ?? 0,
+          powered: solution.poweredMachines.has(part.id),
+          stalled: solution.stalledParts.has(part.id),
+          omega,
+          rpm: toRpm(omega),
           angle: this.angleOf(part.id),
           ramY: pose.ramY,
           rodAngle: pose.rodAngle,
+          loadTorque: loadOf(part),
         };
       });
 

@@ -17,8 +17,8 @@ function chain(): { parts: MechanicalPart[]; connections: readonly Connection[] 
   return { parts, connections: buildConnections(parts) };
 }
 
-describe('M1.7-B power topology', () => {
-  it('powers source -> shaft -> machine at 60 RPM', () => {
+describe('M1.7-B/C power topology', () => {
+  it('runs the chain at drooped speed under the machine load', () => {
     const { parts, connections } = chain();
     expect(connections).toHaveLength(2);
     const topology = buildPowerTopology(parts, connections, 1);
@@ -26,10 +26,14 @@ describe('M1.7-B power topology', () => {
     expect(topology.components[0]?.status).toBe('powered');
     const solution = solvePower(topology, parts, new Set([1]));
     expect(solution.components[0]?.status).toBe('powered');
-    expect(solution.omegaByPart.get(1)).toBeCloseTo(Math.PI * 2, 12);
-    expect(solution.omegaByPart.get(2)).toBeCloseTo(Math.PI * 2, 12);
-    expect(solution.omegaByPart.get(3)).toBeCloseTo(Math.PI * 2, 12);
+    // 源容量 100、冲压机负载 20 → 速度因子 0.8，额定 60 RPM 降到 48 RPM。
+    expect(solution.speedFactorByComponent.get(0)).toBeCloseTo(0.8, 12);
+    expect(solution.demandByComponent.get(0)).toBeCloseTo(20, 12);
+    expect(solution.omegaByPart.get(1)).toBeCloseTo(Math.PI * 1.6, 12);
+    expect(solution.omegaByPart.get(2)).toBeCloseTo(Math.PI * 1.6, 12);
+    expect(solution.omegaByPart.get(3)).toBeCloseTo(Math.PI * 1.6, 12);
     expect(solution.poweredMachines.has(3)).toBe(true);
+    expect(solution.torqueByPart.get(3)).toBeCloseTo(20, 12);
   });
 
   it('stops the whole component when the source is disabled', () => {
@@ -41,15 +45,15 @@ describe('M1.7-B power topology', () => {
     expect(solution.poweredMachines.size).toBe(0);
   });
 
-  it('marks components containing gears unsupported', () => {
+  it('drives a machine through an inline gear at unit ratio', () => {
     const parts = [part(1, 'power_source', -6), part(2, 'gear_12', -5), part(3, 'machine', -4)];
     const connections = buildConnections(parts);
+    expect(connections.every((connection) => connection.kind === 'axial')).toBe(true);
     const topology = buildPowerTopology(parts, connections, 1);
-    expect(topology.components[0]?.status).toBe('unsupported');
-    expect(topology.components[0]?.reason).toBe('gear-requires-c');
+    expect(topology.components[0]?.status).toBe('powered');
     const solution = solvePower(topology, parts, new Set([1]));
-    expect(solution.omegaByPart.size).toBe(0);
-    expect(solution.poweredMachines.size).toBe(0);
+    expect(solution.omegaByPart.get(3)).toBeCloseTo(Math.PI * 1.6, 12);
+    expect(solution.poweredMachines.has(3)).toBe(true);
   });
 
   it('marks multiple installed sources unsupported regardless of enabled state', () => {
@@ -105,7 +109,7 @@ describe('M1.7-B power topology', () => {
     const topology = buildPowerTopology(parts, connections, 1);
     const solution = solvePower(topology, parts, new Set([1]));
     // 源→轴 ratio=-1，轴→机器 ratio=-1；机器标量绕自身 +X 轴恢复为正向。
-    expect(solution.omegaByPart.get(2)).toBeCloseTo(-Math.PI * 2, 12);
-    expect(solution.omegaByPart.get(3)).toBeCloseTo(Math.PI * 2, 12);
+    expect(solution.omegaByPart.get(2)).toBeCloseTo(-Math.PI * 1.6, 12);
+    expect(solution.omegaByPart.get(3)).toBeCloseTo(Math.PI * 1.6, 12);
   });
 });
