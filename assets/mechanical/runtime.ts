@@ -12,7 +12,8 @@ import type {} from '../player/player.ts';
 import { isMechanicalItem, type ItemId } from '../items/items.ts';
 import { placementCenter } from '../grid/grid.ts';
 import { levelBaseY } from '../spatial/space.ts';
-import { FLOOR_MODE_KEY } from '../build/floors.ts';
+import { FLOOR_MODE_KEY, type FloorModeState } from '../build/floors.ts';
+import { BUILD_TARGET_STATE_KEY, type BuildTargetState } from '../build/target.ts';
 import { isProductionMachine, type MechanicalPart } from './parts.ts';
 import type { MechanicalService } from './mechanical.pack.ts';
 import { applyMachinePose, applySpin } from './animation.ts';
@@ -79,10 +80,42 @@ export const mechanicalRuntime: Plugin = {
           .filter(([, count]) => count > 0)
           .map(([itemId, count]) => ({ itemId, count }))
           .sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
+
+        // 建造/楼层模式的当前目标：验收脚本据此确认「鼠标指向的确实是目标格」，
+        // 这是状态读数，不是给测试开后门（真正的放置仍走真实鼠标与合法性校验）。
+        const floorMode = world.hasResource(FLOOR_MODE_KEY)
+          ? world.getResource<FloorModeState>(FLOOR_MODE_KEY)
+          : undefined;
+        const buildTarget = world.hasResource(BUILD_TARGET_STATE_KEY)
+          ? world.getResource<BuildTargetState>(BUILD_TARGET_STATE_KEY)
+          : undefined;
+        const playerPosition = player.state.position;
+
         return {
           ...base,
           production: production.snapshot(),
           inventory: inventorySnapshot,
+          player: {
+            position: [playerPosition[0], playerPosition[1], playerPosition[2]],
+            level: player.state.level,
+            supportId: player.state.supportId,
+            cell: { gx: player.cell.gx, gz: player.cell.gz },
+          },
+          ui: {
+            floorMode: floorMode ? { active: floorMode.active, kind: floorMode.kind, rotation: floorMode.rotation } : null,
+            buildTarget: buildTarget
+              ? {
+                active: buildTarget.active,
+                cell: buildTarget.cell ? { gx: buildTarget.cell.gx, gz: buildTarget.cell.gz } : null,
+                level: buildTarget.level ?? null,
+                valid: buildTarget.valid ?? null,
+              }
+              : null,
+            hoveredPartId: mechanical.hoveredPartId() ?? null,
+            selectedPartId: mechanical.selectedPartId() ?? null,
+            selectedItem: hotbar.slots[hotbar.selected] ?? null,
+            hotbar: { slots: [...hotbar.slots], selected: hotbar.selected },
+          },
         };
       };
 

@@ -24,7 +24,17 @@ describe('M1.7-B runtime state', () => {
     state.sync(1, parts, connections);
     state.step(0.5);
     const snap = state.snapshot();
-    expect(snap.sources).toEqual([{ partId: 1, enabled: false, ratedRpm: 60 }]);
+    // M1.8：source 读数新增 engaged / label / energy / winding（测试动力源无储能 → energy=null）。
+    expect(snap.sources).toEqual([{
+      partId: 1,
+      enabled: false,
+      engaged: false,
+      ratedRpm: 60,
+      label: '测试动力源',
+      energy: null,
+      energyCapacity: null,
+      winding: false,
+    }]);
     expect(snap.networks[0]?.status).toBe('idle');
     expect(snap.machines[0]?.powered).toBe(false);
     expect(snap.machines[0]?.angle).toBe(0);
@@ -104,7 +114,16 @@ describe('M1.7-B runtime state', () => {
     state.sync(2, [parts[1]!, parts[2]!], []);
     expect(state.snapshot().sources).toHaveLength(0);
     state.sync(3, [parts[1]!, parts[2]!, parts[0]!], connections);
-    expect(state.snapshot().sources[0]).toEqual({ partId: 1, enabled: false, ratedRpm: 60 });
+    // M1.8：source 读数新增 engaged / label / energy / winding 字段（测试动力源无储能）。
+    expect(state.snapshot().sources[0]).toMatchObject({
+      partId: 1,
+      enabled: false,
+      engaged: false,
+      ratedRpm: 60,
+      energy: null,
+      energyCapacity: null,
+      winding: false,
+    });
   });
 
   it('produces a JSON snapshot without entity handles', () => {
