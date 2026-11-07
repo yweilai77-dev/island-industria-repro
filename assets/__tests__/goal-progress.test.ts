@@ -243,6 +243,26 @@ describe('M2.0-P1-B 机械运行时只读进度服务', () => {
     expect(laterOrder.snapshot().currentStep.progress).toEqual({ current: 0, required: 2 });
   });
 
+  it('does not change production evidence when the player consumes produced items', () => {
+    const rig = createRig(POWERED_LINE);
+    engageFlywheel(rig);
+    rig.inventory.add('iron_ore', 2);
+    const progress = createGoalProgress();
+    advance(rig, progress, 2);
+    rig.production.insertInto(CRUSHER_ID, 'iron_ore', 2);
+    advanceUntil(rig, progress, () => producedCount(rig, 'crushed_ore') >= 2);
+
+    const taken = rig.production.takeFrom(CRUSHER_ID);
+    expect(taken?.count).toBe(2);
+    rig.inventory.add(taken!.itemId, taken!.count);
+    expect(rig.inventory.remove(taken!.itemId, taken!.count)).toBe(true);
+    progress.update(frame(rig));
+
+    expect(producedCount(rig, 'crushed_ore')).toBe(2);
+    expect(progress.observation().produced.find((entry) => entry.itemId === 'crushed_ore')?.count).toBe(2);
+    expect(progress.state().completed).toContain('crush-ore');
+  });
+
   it('never treats the 24 prototype shafts in the inventory as order evidence', () => {
     const rig = createRig(POWERED_LINE);
     engageFlywheel(rig);
