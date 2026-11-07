@@ -25,11 +25,11 @@ import {
 
 const HIDDEN_POS: readonly [number, number, number] = [0, -1000, 0];
 /** 面板锚点（相机局部坐标）：右上区域，避开左上资源计数与底部快捷栏。 */
-const PANEL_ANCHOR: readonly [number, number, number] = [-0.30, 0.30, -0.95];
+const PANEL_ANCHOR: readonly [number, number, number] = [-0.34, 0.30, -0.95];
 const DIGIT_SCALE = 0.06;
 const DIGIT_STEP = 0.045;
 const UNIT_CELL = 0.012;
-const STATUS_CELL = 0.010;
+const STATUS_CELL = 0.009;
 const ROW_STEP = 0.075;
 const SEGMENT_Z = 0.02;
 
