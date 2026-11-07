@@ -61,6 +61,18 @@ export default async function playthrough(play) {
     await play.mouse.move([0.05, 0.05]);
     await play.wait(350);
   };
+  const deletePart = async (candidates, expectedParts, label) => {
+    for (const point of candidates) {
+      await play.keyboard.press('Digit1');
+      await play.wait(180);
+      await clickPart(point);
+      await play.keyboard.press('Delete');
+      await play.advance(0.1);
+      const s = await snapshot();
+      if (s.parts.length === expectedParts) return s;
+    }
+    throw new Error('could not delete ' + label);
+  };
   const SOURCE_HOVER = [[0.224, 0.511], [0.224, 0.53], [0.226, 0.571], [0.21, 0.52]];
   const MACHINE_M0_HOVER = [[0.325, 0.717], [0.325, 0.772]];
 
@@ -128,31 +140,36 @@ export default async function playthrough(play) {
   await play.step('04-drop-load-and-recover', async () => {
     const before = await read('BEFORE_DROP');
     const frozenAngles = new Map(before.machines.map((machine) => [machine.partId, machine.angle]));
-    // 拆掉 M1：源侧需求 100 → 60，网络应重新计算并恢复。
-    await play.keyboard.press('Digit1');
-    await play.wait(200);
-    await clickPart([0.283, 0.775]);
-    await play.keyboard.press('Delete');
-    await play.advance(0.1);
-    const after = await read('AFTER_DROP');
-    assert(after.parts.length === 8, 'one part should be removed, got ' + after.parts.length);
-    assert(after.machines.length === 2, 'two machines should remain, got ' + after.machines.length);
+    // 第一段：拆 M1。源侧需求 100 → 60，但 24T 主干齿轮承载只有 50，
+    // 60 > 50 → 公共上游齿轮过载，整网仍然停止（branch-overload）。
+    const mid = await deletePart([[0.283, 0.775], [0.283, 0.79]], 8, 'machine M1');
+    const midRead = await read('AFTER_FIRST_DROP');
+    assert(mid.parts.length === 8 && mid.machines.length === 2,
+      'first drop should leave 8 parts / 2 machines');
+    assert(midRead.networks[0]?.status === 'stalled',
+      'trunk gear capacity still exceeded after the first drop, got ' + midRead.networks[0]?.status);
+    assert(midRead.networks[0]?.reason === 'branch-overload',
+      'reason must be branch-overload at the trunk gear, got ' + midRead.networks[0]?.reason);
+    // 第二段：再拆 M0。需求 40 < 主干齿轮 50，网络恢复。
+    await deletePart(MACHINE_M0_HOVER, 7, 'machine M0');
+    const after = await read('AFTER_SECOND_DROP');
+    assert(after.parts.length === 7, 'two parts should be removed in total, got ' + after.parts.length);
+    assert(after.machines.length === 1, 'one machine should remain, got ' + after.machines.length);
     assert(after.networks[0]?.status === 'powered', 'network must recover, got ' + after.networks[0]?.status);
-    assert(Math.abs(after.networks[0].demandTorque - 60) < 1,
-      'source demand should drop to 60 N·m, got ' + after.networks[0].demandTorque);
-    assert(Math.abs(after.networks[0].speedFactor - 0.4) < 0.02,
-      'speed factor should be 0.4, got ' + after.networks[0].speedFactor);
-    assert(after.machines.every((machine) => machine.powered === true), 'remaining machines must run');
+    assert(Math.abs(after.networks[0].demandTorque - 40) < 1,
+      'source demand should drop to 40 N·m, got ' + after.networks[0].demandTorque);
+    assert(Math.abs(after.networks[0].speedFactor - 0.6) < 0.02,
+      'speed factor should be 0.6, got ' + after.networks[0].speedFactor);
+    assert(after.machines[0].powered === true, 'remaining machine must run');
     // 相位从冻结位置继续，不清零。
-    const resumed = after.machines.find((machine) => machine.partId === 5);
-    const frozen = frozenAngles.get(5);
+    const machineId = after.machines[0].partId;
+    const frozen = frozenAngles.get(machineId);
     await play.advance(0.3);
     const moving = await snapshot();
-    const current = moving.machines.find((machine) => machine.partId === 5);
+    const current = moving.machines.find((machine) => machine.partId === machineId);
     assert(current.angle > (frozen ?? 0), 'recovered machine must advance from the frozen phase: '
       + JSON.stringify({ frozen, current: current.angle }));
-    void resumed;
-    await play.mouse.move([0.325, 0.717]);
+    await play.mouse.move([0.255, 0.717]);
     await play.wait(300);
     await play.screenshot('04-recovered-readout');
   });
