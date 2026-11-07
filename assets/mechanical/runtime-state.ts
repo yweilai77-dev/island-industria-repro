@@ -45,6 +45,21 @@ export interface MechanicalSnapshot {
   }[];
 }
 
+/**
+ * 右键启停目标：优先悬停的动力源；悬停的不是动力源时，退回选中的动力源。
+ * 返回 undefined 表示当前不应启停任何东西。
+ */
+export function sourceToggleTarget(
+  parts: readonly MechanicalPart[],
+  hoveredPartId: number | undefined,
+  selectedPartId: number | undefined,
+): number | undefined {
+  const hovered = hoveredPartId === undefined ? undefined : parts.find((part) => part.id === hoveredPartId);
+  if (hovered?.def.kind === 'power-source') return hovered.id;
+  const selected = selectedPartId === undefined ? undefined : parts.find((part) => part.id === selectedPartId);
+  return selected?.def.kind === 'power-source' ? selected.id : undefined;
+}
+
 function rpmOf(part: MechanicalPart): number {
   return part.def.ratedRpm ?? 60;
 }

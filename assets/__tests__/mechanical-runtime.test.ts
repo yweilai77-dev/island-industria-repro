@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createPlacement } from '../grid/grid.ts';
 import { MECHANICAL_PART_DEFS, type MechanicalPart, type PartId } from '../mechanical/parts.ts';
 import { buildConnections } from '../mechanical/ports.ts';
-import { MechanicalRuntimeState } from '../mechanical/runtime-state.ts';
+import { MechanicalRuntimeState, sourceToggleTarget } from '../mechanical/runtime-state.ts';
 
 function part(id: number, defId: PartId, gx: number, gz = 7): MechanicalPart {
   return {
@@ -55,6 +55,15 @@ describe('M1.7-B runtime state', () => {
     state.step(0.25);
     const resumed = state.snapshot();
     expect(resumed.machines[0]?.angle).toBeGreaterThan(runningAngle);
+  });
+
+  it('resolves right-click target: hovered source first, selected source fallback', () => {
+    const { parts } = chain();
+    expect(sourceToggleTarget(parts, 1, undefined)).toBe(1);
+    expect(sourceToggleTarget(parts, 2, 1)).toBe(1);
+    expect(sourceToggleTarget(parts, undefined, 1)).toBe(1);
+    expect(sourceToggleTarget(parts, 2, 2)).toBeUndefined();
+    expect(sourceToggleTarget(parts, undefined, undefined)).toBeUndefined();
   });
 
   it('rebuilds topology only on revision changes, not source toggles', () => {

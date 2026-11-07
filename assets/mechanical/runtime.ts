@@ -7,7 +7,7 @@ import type {} from '../hotbar/hotbar.ts';
 import { isMechanicalItem } from '../items/items.ts';
 import { applyMachinePose, applySpin } from './animation.ts';
 import type { MechanicalService } from './mechanical.pack.ts';
-import { MechanicalRuntimeState } from './runtime-state.ts';
+import { MechanicalRuntimeState, sourceToggleTarget } from './runtime-state.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 
@@ -48,7 +48,7 @@ export const mechanicalRuntime: Plugin = {
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
           const selectedItem = hotbar.slots[hotbar.selected] ?? null;
           if (isMechanicalItem(selectedItem) && input.mouse.justPressed(2)) {
-            const target = mechanical.hoveredPartId() ?? mechanical.selectedPartId();
+            const target = sourceToggleTarget(parts, mechanical.hoveredPartId(), mechanical.selectedPartId());
             if (target !== undefined) state.toggleSource(target);
           }
 
