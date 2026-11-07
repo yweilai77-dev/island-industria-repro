@@ -16,8 +16,16 @@ export interface MechanicalSnapshot {
   readonly revision: number;
   readonly sources: readonly {
     readonly partId: number;
+    /** 逻辑开关（测试动力源 = 启停；飞轮 = 离合是否挂上）。 */
     readonly enabled: boolean;
+    /** 当前是否真的在输出动力（飞轮还要有储能）。 */
+    readonly engaged: boolean;
     readonly ratedRpm: number;
+    readonly label: string;
+    /** 正式动力源的储能；测试动力源为 null。 */
+    readonly energy: number | null;
+    readonly energyCapacity: number | null;
+    readonly winding: boolean;
   }[];
   readonly networks: readonly {
     readonly id: number;
@@ -96,6 +104,14 @@ function loadOf(part: MechanicalPart): number {
   return part.def.loadTorque ?? 0;
 }
 
+/** 正式动力源（手摇飞轮）的运行时状态。 */
+interface EnergySourceRuntime {
+  /** 离合是否挂上（右键启停）。 */
+  clutch: boolean;
+  energy: number;
+  winding: boolean;
+}
+
 /**
  * M1.7-B 运行时状态：
  * - source enabled 是唯一逻辑持久状态；
@@ -103,6 +119,9 @@ function loadOf(part: MechanicalPart): number {
  * - source 开关只使 solution 变脏；
  * - angle / machine pose 是从 ω 推导的视觉运行状态；
  * - snapshot 是纯 JSON 读投影。
+ *
+ * M1.8-B：正式动力源（手摇飞轮）在此维护能量池；储能耗尽后自动断开输出，
+ * 使 `solvePower` 看到「源不可用」，机器正确停转，而不是靠视觉假装停止。
  */
 export class MechanicalRuntimeState {
   private revision = -1;
@@ -112,6 +131,7 @@ export class MechanicalRuntimeState {
   private topologyCache: PowerTopology | null = null;
   private solutionCache: PowerSolution | null = null;
   private sourceEnabled = new Map<number, boolean>();
+  private energySources = new Map<number, EnergySourceRuntime>();
   private angles = new Map<number, number>();
   private machinePoses = new Map<number, MachinePose>();
   private solutionDirty = true;
@@ -140,6 +160,18 @@ export class MechanicalRuntimeState {
     for (const partId of [...this.machinePoses.keys()]) {
       if (!this.partMap.has(partId)) this.machinePoses.delete(partId);
     }
+    // 正式动力源：补建/清理能量状态（新装上的飞轮从 0 能量开始，必须先摇）。
+    const energyParts = new Set<number>();
+    for (const part of this.parts) {
+      if (!part.def.energy) continue;
+      energyParts.add(part.id);
+      if (!this.energySources.has(part.id)) {
+        this.energySources.set(part.id, { clutch: false, energy: 0, winding: false });
+      }
+    }
+    for (const partId of [...this.energySources.keys()]) {
+      if (!energyParts.has(partId)) this.energySources.delete(partId);
+    }
     this.solutionDirty = true;
   }
 
@@ -164,6 +196,8 @@ export class MechanicalRuntimeState {
     if (!part || part.def.kind !== 'power-source') return false;
     if (this.isSourceEnabled(partId) === enabled) return false;
     this.sourceEnabled.set(partId, enabled);
+    const energy = this.energySources.get(partId);
+    if (energy) energy.clutch = enabled;
     this.solutionDirty = true;
     return true;
   }
@@ -185,11 +219,57 @@ export class MechanicalRuntimeState {
     if (!this.topologyCache) return null;
     if (this.solutionDirty || !this.solutionCache) {
       const enabled = new Set<number>();
-      for (const [partId, value] of this.sourceEnabled) if (value) enabled.add(partId);
+      for (const [partId, value] of this.sourceEnabled) {
+        if (value && this.isEffectivelyEngaged(partId)) enabled.add(partId);
+      }
       this.solutionCache = solvePower(this.topologyCache, this.parts, enabled);
       this.solutionDirty = false;
     }
     return this.solutionCache;
+  }
+
+  /** 正式动力源是否真的能输出：离合挂上 **且** 还有储能；测试动力源只看开关。 */
+  private isEffectivelyEngaged(partId: number): boolean {
+    if (this.sourceEnabled.get(partId) !== true) return false;
+    const energy = this.energySources.get(partId);
+    if (!energy) return true;
+    return energy.energy > 0;
+  }
+
+  isEngaged(partId: number): boolean {
+    return this.isEffectivelyEngaged(partId);
+  }
+
+  /** 正式动力源的储能读数；测试动力源返回 undefined。 */
+  energyOf(partId: number): { energy: number; capacity: number; winding: boolean; clutch: boolean } | undefined {
+    const state = this.energySources.get(partId);
+    const part = this.partMap.get(partId);
+    if (!state || !part?.def.energy) return undefined;
+    return {
+      energy: state.energy,
+      capacity: part.def.energy.capacity,
+      winding: state.winding,
+      clutch: state.clutch,
+    };
+  }
+
+  /** 设置/清除摇动状态；只对正式动力源有效。 */
+  setWinding(partId: number, winding: boolean): boolean {
+    const state = this.energySources.get(partId);
+    if (!state) return false;
+    if (state.winding === winding) return false;
+    state.winding = winding;
+    return true;
+  }
+
+  isWinding(partId: number): boolean {
+    return this.energySources.get(partId)?.winding ?? false;
+  }
+
+  /** 实际转速 / 额定 60 RPM（供加工速率使用）。 */
+  rateOf(partId: number): number {
+    const omega = this.omegaOf(partId);
+    return Math.abs(omega) / TAU;
   }
 
   /** 零件所在动力网络（已解算状态）；未参与网络时 undefined。 */
@@ -221,15 +301,48 @@ export class MechanicalRuntimeState {
   }
 
   step(deltaSeconds: number): void {
+    const dt = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds, 0.1)) : 0;
+    // 先用上一帧的解算结果结算储能，再按新的「是否还能输出」重解一次。
+    const prior = this.ensureSolution();
+    this.integrateEnergy(dt, prior);
     const solution = this.ensureSolution();
     if (!solution) return;
-    const dt = Number.isFinite(deltaSeconds) ? Math.max(0, Math.min(deltaSeconds, 0.1)) : 0;
 
     for (const part of this.parts) {
       const omega = solution.omegaByPart.get(part.id) ?? 0;
       const angle = this.angleOf(part.id) + omega * dt;
       this.angles.set(part.id, angle);
       if (part.def.kind === 'machine') this.machinePoses.set(part.id, machinePose(angle));
+    }
+  }
+
+  /**
+   * 储能结算：
+   * - 摇动摇柄时按 windRate 注入（上限 = capacity）；
+   * - 离合挂上时按「空载耗 + 负载耗 × 需求/容量」抽能；
+   * - 能量跨过 0 边界时把解算标脏，下一帧动力网络就会把机器判为停转。
+   */
+  private integrateEnergy(dt: number, prior: PowerSolution | null): void {
+    if (dt <= 0) return;
+    for (const [partId, state] of this.energySources) {
+      const part = this.partMap.get(partId);
+      const spec = part?.def.energy;
+      if (!part || !spec) continue;
+      const before = state.energy;
+      if (state.winding) {
+        state.energy = Math.min(spec.capacity, state.energy + spec.windRate * dt);
+      } else if (state.clutch) {
+        const componentIndex = this.topologyCache?.componentByPart.get(partId);
+        const demand = componentIndex !== undefined && prior
+          ? (prior.demandByComponent.get(componentIndex) ?? 0)
+          : 0;
+        const capacity = part.def.maxTorque > 0 ? part.def.maxTorque : 1;
+        const loadRatio = Math.min(1, Math.max(0, demand / capacity));
+        const drain = spec.baseDrain + spec.loadDrain * loadRatio;
+        state.energy = Math.max(0, state.energy - drain * dt);
+      }
+      if (before === 0 && state.energy > 0) this.solutionDirty = true;
+      if (before > 0 && state.energy === 0) this.solutionDirty = true;
     }
   }
 
@@ -248,7 +361,19 @@ export class MechanicalRuntimeState {
 
     const sources = this.parts
       .filter((part) => part.def.kind === 'power-source')
-      .map((part) => ({ partId: part.id, enabled: this.isSourceEnabled(part.id), ratedRpm: rpmOf(part) }))
+      .map((part) => {
+        const energy = this.energyOf(part.id);
+        return {
+          partId: part.id,
+          enabled: this.isSourceEnabled(part.id),
+          engaged: this.isEffectivelyEngaged(part.id),
+          ratedRpm: rpmOf(part),
+          label: part.def.label,
+          energy: energy ? energy.energy : null,
+          energyCapacity: energy ? energy.capacity : null,
+          winding: energy ? energy.winding : false,
+        };
+      })
       .sort((a, b) => a.partId - b.partId);
 
     const networks = solution.components.map((component) => ({
@@ -317,6 +442,7 @@ export class MechanicalRuntimeState {
     this.topologyCache = null;
     this.solutionCache = null;
     this.sourceEnabled.clear();
+    this.energySources.clear();
     this.angles.clear();
     this.machinePoses.clear();
     this.solutionDirty = true;

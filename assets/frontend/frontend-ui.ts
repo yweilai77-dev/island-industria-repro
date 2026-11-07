@@ -3,10 +3,22 @@
 // 协议解析见 frontend-ui-protocol.ts，样式表见 frontend-ui-styles.ts。
 import type {} from '@forgeax/engine/app';
 import type { Plugin } from '@forgeax/engine/plugin';
+import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import { itemIconSvg } from './icons.ts';
 import { FRONTEND_UI_CSS } from './frontend-ui-styles.ts';
-import { PROTOCOL_VERSION, SLOT_COUNT, isOkResult, parseState } from './frontend-ui-protocol.ts';
+import { PROTOCOL_VERSION, isOkResult, parseState } from './frontend-ui-protocol.ts';
 import type { CatalogItem, HostLike, StateMessage, UiState } from './frontend-ui-protocol.ts';
+
+// 快捷栏键位：前 10 格对应 1-9、0；第 11、12 格没有数字键，只能鼠标点选。
+const slotKeyLabel = (index: number): string => {
+  if (index >= 0 && index < 9) return String(index + 1);
+  return index === 9 ? '0' : '';
+};
+
+const slotFromKey = (key: string): number | undefined => {
+  if (key >= '1' && key <= '9') return Number(key) - 1;
+  return key === '0' ? 9 : undefined;
+};
 
 export const frontendUi: Plugin = {
   name: 'island-industria/frontend-ui',
@@ -29,7 +41,7 @@ export const frontendUi: Plugin = {
       paused: false,
       revision: -1,
       items: [],
-      hotbar: { slots: new Array(SLOT_COUNT).fill(null), selected: 0 },
+      hotbar: { slots: new Array(HOTBAR_SLOT_COUNT).fill(null), selected: 0 },
       selectedItemId: null,
     };
 
@@ -47,13 +59,14 @@ export const frontendUi: Plugin = {
     hotbar.className = 'ii-hotbar';
     shell.appendChild(hotbar);
     const slotElements: HTMLDivElement[] = [];
-    for (let index = 0; index < SLOT_COUNT; index += 1) {
+    for (let index = 0; index < HOTBAR_SLOT_COUNT; index += 1) {
       const slot = doc.createElement('div');
       slot.className = 'ii-slot empty';
       slot.dataset.slot = String(index);
       const key = doc.createElement('div');
       key.className = 'ii-slot-key';
-      key.textContent = String(index + 1);
+      // 只有前 10 格有数字键提示（1-9、0）；第 11、12 格只能用鼠标点选，不显示键位。
+      key.textContent = slotKeyLabel(index);
       const icon = doc.createElement('div');
       icon.className = 'ii-slot-icon';
       const count = doc.createElement('div');
@@ -140,7 +153,7 @@ export const frontendUi: Plugin = {
 
     // ---- 渲染 ----
     const renderHotbar = (): void => {
-      for (let index = 0; index < SLOT_COUNT; index += 1) {
+      for (let index = 0; index < HOTBAR_SLOT_COUNT; index += 1) {
         const element = slotElements[index]!;
         const itemId = ui.hotbar.slots[index] ?? null;
         const item = itemById(itemId);
@@ -382,9 +395,10 @@ export const frontendUi: Plugin = {
         return;
       }
       if (!ui.open) return;
-      if (event.key >= '1' && event.key <= '8') {
+      const slot = slotFromKey(event.key);
+      if (slot !== undefined) {
         event.preventDefault();
-        send({ type: 'hotbar/select', slot: Number(event.key) - 1 });
+        send({ type: 'hotbar/select', slot });
       }
     };
     window.addEventListener('keydown', onKeyDown, true);

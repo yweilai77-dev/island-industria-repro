@@ -1,7 +1,11 @@
 import type { ItemId } from '../items/items.ts';
 
-/** 快捷栏固定槽位数量。 */
-export const HOTBAR_SLOT_COUNT = 8;
+/**
+ * 快捷栏固定槽位数量。
+ * M1.8：机械零件从 5 种增加到 11 种，8 格装不下（`bind` 越界会抛 RangeError 导致启动失败），
+ * 扩到 12 格。键盘 Digit1-9/0 覆盖前 10 格，第 11、12 格用鼠标点 UI 选择。
+ */
+export const HOTBAR_SLOT_COUNT = 12;
 
 export type HotbarSlot = ItemId | null;
 

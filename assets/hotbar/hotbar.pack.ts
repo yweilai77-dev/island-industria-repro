@@ -7,13 +7,18 @@ import { PACKAGE_IDS } from '../shared/asset-refs.ts';
 import { HOTBAR_SLOT_COUNT, createHotbarService } from './hotbar.ts';
 
 const SYSTEM_NAME = 'island-industria/hotbar-input';
+/**
+ * 12 格槽位的键盘映射：1-9 → 0-8，0 → 9，`-` → 10，`=` → 11。
+ * 索引 5 是刻意保留的空槽（M1.7 历史脚本用 Digit6 退出机械模式）。
+ */
 const DIGIT_CODES = [
   'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8',
+  'Digit9', 'Digit0', 'Minus', 'Equal',
 ] as const;
 
 /**
- * 快捷栏：8 个槽位、绑定/选中状态由 Engine 持有；
- * 数字键 1-8 选择槽位（背包打开时由前端处理并走 MessagePort）。
+ * 快捷栏：12 个槽位、绑定/选中状态由 Engine 持有；
+ * 数字键 1-9/0 与 `-`/`=` 选择槽位（背包打开时由前端处理并走 MessagePort）。
  */
 export const hotbarPlugin: Plugin = {
   name: 'island-industria/hotbar',

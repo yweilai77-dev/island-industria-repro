@@ -11,7 +11,8 @@ import { PartViewRegistry } from '../mechanical/visuals.ts';
 
 describe('mechanical items and prototype kit', () => {
   it('registers all mechanical items with category and correct mapping', () => {
-    expect(itemDefinitions()).toHaveLength(6);
+    // M1.8：6 → 14（新增碎铁矿、铁锭 + 6 种新机械零件）。
+    expect(itemDefinitions()).toHaveLength(14);
     for (const itemId of MECHANICAL_ITEM_IDS) expect(isMechanicalItem(itemId)).toBe(true);
     expect(isMechanicalItem(ITEM_IDS.IRON_ORE)).toBe(false);
     expect(isMechanicalItem(null)).toBe(false);

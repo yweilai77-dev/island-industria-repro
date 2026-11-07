@@ -17,7 +17,15 @@ import {
 export const SUPPORT_REGISTRY_KEY = 'IslandIndustriaSupportRegistry';
 export const GROUND_SUPPORT_ID = 'support:ground';
 
-export type SupportKind = 'ground' | 'platform';
+/**
+ * 支撑面种类。
+ * - ground：地面（MapConfig 覆盖全域）；
+ * - platform：固定平台；
+ * - deck：M1.8 玩家自建楼板顶面（可建造 + 可行走）；
+ * - opening：M1.8 玩家自建楼板「开孔」面（可建造、**不可行走**）——
+ *   这是跨层传动唯一合法的穿层机制：孔上可以立传动件，但玩家走不进洞里。
+ */
+export type SupportKind = 'ground' | 'platform' | 'deck' | 'opening';
 
 export interface SupportSurface {
   readonly id: string;

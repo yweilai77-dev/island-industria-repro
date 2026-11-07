@@ -30,7 +30,8 @@ describe('hotbar slots and selection', () => {
 
   it('rejects invalid slots', () => {
     const state = createHotbarState();
-    for (const bad of [-1, 8, 1.5, NaN]) {
+    // M1.8：槽位数 8 → 12，越界值随之改为 12。
+    for (const bad of [-1, HOTBAR_SLOT_COUNT, 1.5, NaN]) {
       expect(() => selectSlot(state, bad)).toThrow(RangeError);
       expect(() => bindItem(state, bad, IRON)).toThrow(RangeError);
       expect(() => unbindSlot(state, bad)).toThrow(RangeError);

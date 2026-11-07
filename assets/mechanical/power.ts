@@ -126,10 +126,12 @@ function componentHasCycle(
  * 多源组件保持 unsupported/multiple-sources。
  */
 export function buildPowerTopology(
-  parts: readonly MechanicalPart[],
+  allParts: readonly MechanicalPart[],
   connections: readonly Connection[],
   revision: number,
 ): PowerTopology {
+  // M1.8：没有端口的零件（重力溜槽）不参与动力网络，否则会生成一堆 no-source 单点组件。
+  const parts = allParts.filter((part) => part.def.ports.length > 0);
   const partMap = new Map<number, MechanicalPart>();
   for (const part of parts) partMap.set(part.id, part);
 

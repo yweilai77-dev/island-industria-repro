@@ -34,7 +34,7 @@ describe('item definitions', () => {
     expect(IRON_ORE_DEFINITION.description.length).toBeGreaterThan(0);
     expect(IRON_ORE_DEFINITION.icon).toBe('iron_ore');
     expect(getItemDefinition(IRON)).toEqual(IRON_ORE_DEFINITION);
-    expect(itemDefinitions()).toHaveLength(6);
+    expect(itemDefinitions()).toHaveLength(14);
   });
 
   it('returns undefined for unknown item ids', () => {

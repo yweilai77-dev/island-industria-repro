@@ -54,6 +54,8 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.spatial, 'plugin/spatial')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.structures, 'plugin/structures')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.player, 'plugin/player')) },
+          // M1.8-A 楼层结构：需要 spatial/player 已就绪；必须早于 build（模式锁在 build 之前写入）。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.floors, 'plugin/floors')) },
           // hotbar 必须先于 build（build 注入 hotbar 服务）。
           { $asset: guidText(assetGuid(PACKAGE_IDS.hotbar, 'plugin/hotbar')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.resource, 'plugin/resource')) },

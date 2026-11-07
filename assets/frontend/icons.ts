@@ -60,6 +60,101 @@ const MACHINE_SVG = [
   '</svg>',
 ].join('');
 
+// M1.8 生产链新物品图标。风格与上面一致：64×64、内联、深色描边、无字体/外链依赖。
+const CRUSHED_ORE_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<polygon points="4,52 16,40 28,45 40,34 52,43 60,52" fill="#6b6257" stroke="#2c3035" stroke-width="2"/>',
+  '<polygon points="10,52 20,42 32,47 44,38 54,47 56,52" fill="#8a7f70"/>',
+  '<circle cx="18" cy="36" r="5" fill="#9a8f7e" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="33" cy="29" r="4.5" fill="#7d7568" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="47" cy="35" r="4" fill="#8f8374" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="27" cy="22" r="3" fill="#5f574d" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="52" cy="24" r="2.5" fill="#6b6257" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+const IRON_INGOT_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<polygon points="22,20 42,20 52,34 12,34" fill="#e6edf4" stroke="#2c3035" stroke-width="2"/>',
+  '<polygon points="12,34 52,34 46,50 18,50" fill="#aab4bf" stroke="#2c3035" stroke-width="2"/>',
+  '<polygon points="22,20 31,20 24,34 12,34" fill="#f7fbff" opacity="0.9"/>',
+  '<path d="M20 43h22" stroke="#7d8895" stroke-width="2"/>',
+  '<path d="M26 24h8" stroke="#ffffff" stroke-width="2" opacity="0.7"/>',
+  '</svg>',
+].join('');
+
+const VERTICAL_DRIVE_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="14" y="6" width="36" height="52" rx="5" fill="#5b6068" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M24 19v26M40 19v26" stroke="#8b95a0" stroke-width="4"/>',
+  '<circle cx="32" cy="18" r="8" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="32" cy="46" r="8" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="32" cy="18" r="2.5" fill="#3d4650"/>',
+  '<circle cx="32" cy="46" r="2.5" fill="#3d4650"/>',
+  '<path d="M12 32h4M48 32h4" stroke="#3d4650" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+const FLYWHEEL_SOURCE_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<circle cx="27" cy="32" r="21" fill="#47606f" stroke="#22303d" stroke-width="2"/>',
+  '<circle cx="27" cy="32" r="14" fill="#5b6068" stroke="#22303d" stroke-width="2"/>',
+  '<path d="M27 18v28M13 32h28M17 22l20 20M37 22L17 42" stroke="#8b95a0" stroke-width="2.5"/>',
+  '<circle cx="27" cy="32" r="4" fill="#d9a441" stroke="#5a3f15" stroke-width="2"/>',
+  '<rect x="44" y="28" width="10" height="8" rx="2" fill="#9aa4ae" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M54 32h4" stroke="#3d4650" stroke-width="4"/>',
+  '<rect x="56" y="18" width="4" height="14" rx="2" fill="#c7d0da" stroke="#3d4650" stroke-width="2"/>',
+  '<circle cx="58" cy="16" r="3" fill="#c7d0da" stroke="#3d4650" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+const CRUSHER_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<polygon points="10,6 54,6 46,26 18,26" fill="#5b6068" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="14" y="26" width="36" height="22" rx="3" fill="#47606f" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="24" cy="37" r="7" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="40" cy="37" r="7" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M19 33.5h10M19 37h10M19 40.5h10" stroke="#8b95a0" stroke-width="1.5"/>',
+  '<path d="M35 33.5h10M35 37h10M35 40.5h10" stroke="#8b95a0" stroke-width="1.5"/>',
+  '<path d="M24 26v-3M40 26v-3M17 37h-3M47 37h3" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="25" y="48" width="14" height="8" rx="2" fill="#6f7a84" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+const SMELTER_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="12" y="12" width="40" height="44" rx="4" fill="#7a4a3a" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M12 20h40M12 28h40M12 36h40M12 44h40M12 52h40" stroke="#5a3529" stroke-width="1.5"/>',
+  '<path d="M32 12v8M22 20v8M42 28v8M22 36v8M42 44v8M32 52v4" stroke="#5a3529" stroke-width="1.5"/>',
+  '<rect x="23" y="31" width="18" height="14" rx="2" fill="#241209" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="26" y="35" width="12" height="7" rx="1" fill="#ff9a3c"/>',
+  '<rect x="28" y="37" width="8" height="3" fill="#ffd9a0"/>',
+  '<path d="M14 56h36" stroke="#3d4650" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+const FORGE_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="14" y="46" width="36" height="8" rx="2" fill="#3d4650" stroke="#2c3035" stroke-width="2"/>',
+  '<polygon points="22,32 42,32 47,46 17,46" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="16" y="26" width="32" height="7" rx="2" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<polygon points="48,26 56,26 53,33 46,33" fill="#c7d0da" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="18" y="6" width="20" height="11" rx="3" fill="#9aa4ae" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="36" y="9" width="18" height="5" rx="2" fill="#8a6a3c" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M14 20l4-4M22 17l2-3" stroke="#ffb066" stroke-width="2" opacity="0.8"/>',
+  '</svg>',
+].join('');
+
+const CHUTE_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<g transform="rotate(-18 32 32)">',
+  '<path d="M9 20v10a13 13 0 0 0 13 13h20a13 13 0 0 0 13-13V20" fill="none" stroke="#2c3035" stroke-width="9" stroke-linecap="round"/>',
+  '<path d="M9 20v10a13 13 0 0 0 13 13h20a13 13 0 0 0 13-13V20" fill="none" stroke="#8b95a0" stroke-width="5.5" stroke-linecap="round"/>',
+  '<path d="M9 20v10a13 13 0 0 0 13 13h20a13 13 0 0 0 13-13V20" fill="none" stroke="#4a5560" stroke-width="2" stroke-linecap="round"/>',
+  '</g>',
+  '</svg>',
+].join('');
+
 const PLACEHOLDER_SVG = [
   '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
   '<rect x="12" y="12" width="40" height="40" rx="8" fill="#3a4a5c" stroke="#22303d" stroke-width="2"/>',
@@ -82,6 +177,22 @@ export function itemIconSvg(iconKey: string): string {
       return POWER_SOURCE_SVG;
     case 'machine':
       return MACHINE_SVG;
+    case 'crushed_ore':
+      return CRUSHED_ORE_SVG;
+    case 'iron_ingot':
+      return IRON_INGOT_SVG;
+    case 'vertical_drive':
+      return VERTICAL_DRIVE_SVG;
+    case 'flywheel_source':
+      return FLYWHEEL_SOURCE_SVG;
+    case 'crusher':
+      return CRUSHER_SVG;
+    case 'smelter':
+      return SMELTER_SVG;
+    case 'forge':
+      return FORGE_SVG;
+    case 'chute':
+      return CHUTE_SVG;
     default:
       return PLACEHOLDER_SVG;
   }

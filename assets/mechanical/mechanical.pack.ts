@@ -21,11 +21,13 @@ import { createPlacement, normalizeRotation, placementCenter, type Placement, ty
 import { overlapsPlayer } from '../player/occupancy.ts';
 import type {} from '../player/player.ts';
 import type {} from '../inventory/inventory.ts';
-import type {} from '../hotbar/hotbar.ts';
+import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import type {} from '../spatial/service.ts';
 import type {} from '@forgeax/engine/app';
+import { FLOOR_MODE_KEY } from '../build/floors.ts';
 import {
   PROTOTYPE_KIT,
+  PROTOTYPE_KIT_SLOTS,
   MECHANICAL_PART_DEFS,
   MECH_STRUCTURE_PREFIX,
   partDefForItem,
@@ -119,13 +121,13 @@ export const mechanicalSystem: Plugin = {
 
       const grantKit = (): void => {
         if (world.hasResource(KIT_GRANTED_KEY)) return;
-        const kitSlots: readonly PartId[] = ['shaft', 'gear_12', 'gear_24', 'power_source', 'machine'];
-        kitSlots.forEach((id, index) => {
+        // 槽位表见 PROTOTYPE_KIT_SLOTS：0-4 保持 M1.7 顺序，5 保持空槽，6-11 是新零件。
+        for (const { slot, id } of PROTOTYPE_KIT_SLOTS) {
           const definition = MECHANICAL_PART_DEFS[id];
           inventory.add(definition.itemId, PROTOTYPE_KIT[id]);
-          hotbar.bind(index, definition.itemId);
-        });
-        // 默认选中空槽，保留 M1.5 的普通建造默认行为；按 1-5 进入机械模式。
+          if (slot < HOTBAR_SLOT_COUNT) hotbar.bind(slot, definition.itemId);
+        }
+        // 默认选中空槽（索引 5），保留 M1.5 的普通建造默认行为；按 1-5 进入机械模式。
         hotbar.select(5);
         world.insertResource(KIT_GRANTED_KEY, 1);
       };
@@ -392,6 +394,14 @@ export const mechanicalSystem: Plugin = {
         queries: [],
         fn: () => {
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
+          // 楼层建造模式（M1.8-A）：floors 插件在 build 之前写入该资源，机械放置完全让出输入。
+          if (world.hasResource(FLOOR_MODE_KEY)) {
+            setGhost(undefined, undefined, false);
+            hideGhost(selection);
+            selectedPartId = undefined;
+            hoveredPartId = undefined;
+            return;
+          }
           const definition = selectedItem();
           const inMode = definition !== undefined;
           if (!inMode) {

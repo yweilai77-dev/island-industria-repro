@@ -1,7 +1,10 @@
 // 前端 UI 与 Engine 侧之间的消息协议：状态形状、常量，以及把 port 消息解析成 UI 状态的纯函数。
 // 这里不碰 DOM，便于单独测试。
+import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
+
 export const PROTOCOL_VERSION = 1;
-export const SLOT_COUNT = 8;
+// 槽位数量以快捷栏服务为唯一来源，避免前端与 Engine 侧槽数各写一份而悄悄失配。
+export const SLOT_COUNT = HOTBAR_SLOT_COUNT;
 
 export interface CatalogItem {
   readonly id: string;

@@ -52,6 +52,7 @@ import {
   setAdjustmentValidity,
   type BuildingAdjustment,
 } from './adjustment.ts';
+import { FLOOR_MODE_KEY } from './floors.ts';
 
 const SYSTEM_NAME = BUILD_SYSTEM_NAME;
 const HIDDEN_Y = -1000;
@@ -483,6 +484,15 @@ export const buildSystem: Plugin = {
           fn: () => {
             const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
             const selectedHotbarItem = hotbar.slots[hotbar.selected] ?? null;
+
+            // 楼层建造模式（M1.8-A）：floors 插件在 build 之前写入该资源，普通建造完全让出输入。
+            if (world.hasResource(FLOOR_MODE_KEY)) {
+              if (adjustment !== undefined) finishAdjustment('abort');
+              hideAllGhosts();
+              hideDirectionMarker();
+              hideSelection();
+              return;
+            }
 
             // 机械模式：build 完全让出输入（机械系统在 build 之后接管）。
             // 同时清掉普通建筑选中/调整状态，保证 X/G 不会误作用于普通建筑。

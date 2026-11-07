@@ -34,4 +34,6 @@ export const PACKAGE_IDS = Object.freeze({
   structures: definePackageId('019fbf00-5800-7000-8000-000000000000'),
   // M1.7-A 机械零件/端口/放置系统
   mechanical: definePackageId('019fbf00-5900-7000-8000-000000000000'),
+  // M1.8-A 玩家可建造楼层结构（支柱/楼板/开孔/楼梯）
+  floors: definePackageId('019fbf00-5a00-7000-8000-000000000000'),
 });

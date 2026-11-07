@@ -28,7 +28,7 @@ describe('ui command validation', () => {
     expect(parseUiCommand('hello').ok).toBe(false);
     expect(parseUiCommand({ v: 99, type: 'hello' }).ok).toBe(false);
     expect(parseUiCommand({ v: 1, type: 'unknown' }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 8 }).ok).toBe(false);
+    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 12 }).ok).toBe(false);
     expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: -1 }).ok).toBe(false);
     expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 1.5 }).ok).toBe(false);
     expect(parseUiCommand({ v: 1, type: 'hotbar/bind', slot: 0, itemId: 'stone' }).ok).toBe(false);
@@ -38,7 +38,8 @@ describe('ui command validation', () => {
   it('checks slot indexes', () => {
     expect(isSlotIndex(0)).toBe(true);
     expect(isSlotIndex(7)).toBe(true);
-    expect(isSlotIndex(8)).toBe(false);
+    expect(isSlotIndex(11)).toBe(true);
+    expect(isSlotIndex(12)).toBe(false);
     expect(isSlotIndex(1.2)).toBe(false);
     expect(isSlotIndex('1')).toBe(false);
   });

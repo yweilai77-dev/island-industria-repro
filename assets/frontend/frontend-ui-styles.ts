@@ -1,20 +1,24 @@
 // 背包 / 快捷栏 UI 的样式表。单独成文件：样式改动频繁但风险低，和交互逻辑分开更好读。
 export const FRONTEND_UI_CSS = `
 .ii-ui { position: fixed; inset: 0; pointer-events: none; z-index: 1000;
+  /* 槽宽按格数自适应：12 格整条总能塞进视口（32px 左右安全边距 + 11 个间隙），不换行、不溢出。 */
+  --ii-slot-size: clamp(30px, min(4.2vw, calc((100vw - 152px) / 12)), 46px);
+  --ii-slot-gap: 8px;
   font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; color: #dbe7f3; }
 .ii-ui * { box-sizing: border-box; }
 .ii-hotbar { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
-  display: flex; gap: 8px; padding: 8px; background: rgba(8, 13, 19, 0.86);
+  display: flex; gap: var(--ii-slot-gap); padding: 8px; max-width: calc(100vw - 32px);
+  background: rgba(8, 13, 19, 0.86);
   border: 1px solid #2c3c4c; border-radius: 14px; pointer-events: auto; z-index: 30;
   box-shadow: 0 8px 26px rgba(0, 0, 0, 0.5); }
-.ii-slot { position: relative; width: 56px; height: 56px; border-radius: 9px;
+.ii-slot { position: relative; flex: 0 0 auto; width: var(--ii-slot-size); height: var(--ii-slot-size); border-radius: 9px;
   border: 1px solid #33475a; background: linear-gradient(180deg, #16222e, #0e1720);
   cursor: pointer; display: flex; align-items: center; justify-content: center; user-select: none; }
 .ii-slot:hover { border-color: #5b7e9c; background: linear-gradient(180deg, #1b2b3a, #101b26); }
 .ii-slot.selected { border-color: #57d4ff; box-shadow: 0 0 0 1px #57d4ff, 0 0 16px rgba(87, 212, 255, 0.55); }
 .ii-slot.drop-target { border-color: #7dff9b; box-shadow: 0 0 12px rgba(125, 255, 155, 0.6); }
 .ii-slot-key { position: absolute; left: 5px; top: 3px; font-size: 10px; color: #6f8aa3; }
-.ii-slot-icon { width: 32px; height: 32px; }
+.ii-slot-icon { width: 65%; height: 65%; }
 .ii-slot-count { position: absolute; right: 5px; bottom: 3px; font-size: 12px; font-weight: 600;
   color: #eaf4ff; text-shadow: 0 1px 2px #000; }
 .ii-slot.empty .ii-slot-icon { display: none; }
@@ -56,7 +60,8 @@ export const FRONTEND_UI_CSS = `
 .ii-error { font-size: 12px; color: #ff9a8a; margin-left: 10px; }
 .ii-drag-ghost { position: fixed; width: 42px; height: 42px; pointer-events: none; z-index: 100;
   transform: translate(-50%, -50%); opacity: 0.9; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.6)); }
-.ii-hint { position: absolute; left: 50%; bottom: 88px; transform: translateX(-50%);
+/* 落在快捷栏正上方 6px：快捷栏总高 = 槽高 + 上下内边距 16 + 边框 2，距底 18。 */
+.ii-hint { position: absolute; left: 50%; bottom: calc(var(--ii-slot-size) + 42px); transform: translateX(-50%);
   font-size: 12px; color: #8aa3bb; background: rgba(8,13,19,0.8); border: 1px solid #22303d;
   border-radius: 6px; padding: 4px 10px; pointer-events: none; z-index: 25; }
 `;
