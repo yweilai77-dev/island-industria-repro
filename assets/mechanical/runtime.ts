@@ -41,9 +41,7 @@ const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 const WIND_VERTICAL_TOLERANCE = 2.5;
 
 /**
- * M2.0-P1-B：第一份工业订单的只读进度服务。
- * 只把现有运行时快照映射成 A 阶段的 GoalObservation 再求值；不修改库存/生产/动力/机器状态，
- * 也不把运行时实例暴露给外部。
+ * M2.0-P1-B：第一份工业订单的只读进度服务。只读映射现有快照，不修改运行时、不暴露运行时实例。
  */
 declare module '@forgeax/engine/plugin' {
   interface EngineContextServices {
@@ -52,7 +50,7 @@ declare module '@forgeax/engine/plugin' {
   }
 }
 
-/** 目标系统一帧数据的真实来源（现有系统的只读快照）。 */
+/** 目标系统一帧数据的真实来源。 */
 export interface GoalFrameSource {
   readonly parts: readonly MechanicalPart[];
   readonly mechanical: MechanicalSnapshot;
@@ -85,7 +83,7 @@ const EMPTY_GOAL_OBSERVATION: GoalObservation = Object.freeze({
   produced: Object.freeze([]),
 });
 
-/** 把 ProductionSnapshot 的宽类型 block 收敛回合法阻塞原因。 */
+/** 宽类型 block 收敛为合法阻塞原因。 */
 function asMachineBlockReason(value: string): MachineBlockReason {
   switch (value) {
     case 'ok':
@@ -99,7 +97,7 @@ function asMachineBlockReason(value: string): MachineBlockReason {
   }
 }
 
-/** 把机械/生产/库存的现有只读快照映射成目标系统观测（纯函数，不修改输入）。 */
+/** 把现有只读快照映射成目标观测（纯函数，不修改输入）。 */
 export function assembleGoalObservation(source: GoalFrameSource): GoalObservation {
   const mechanicalParts = new Map(source.mechanical.parts.map((part) => [part.partId, part]));
   const parts: GoalPartObservation[] = source.parts.map((part) => {
@@ -150,9 +148,8 @@ export function assembleGoalObservation(source: GoalFrameSource): GoalObservatio
 }
 
 /**
- * 创建订单进度求值器。
- * 订单在第一帧真实观测时开始（当前版本没有存档/菜单，机械运行时初始化即世界载入），
- * 此时记录 production.produced 基线；之后只按「当前累计 - 基线」判定生产步骤。
+ * 创建订单进度求值器：第一帧真实观测时记录 production.produced 基线，之后只按增量判定。
+ * 当前版本没有存档/菜单，机械运行时初始化即世界载入，因此订单起点就是首帧。
  */
 export function createGoalProgress(): GoalProgressReader {
   const preview = evaluateGoal(createGoalState(EMPTY_GOAL_OBSERVATION), EMPTY_GOAL_OBSERVATION);
@@ -210,9 +207,13 @@ export const mechanicalRuntime: Plugin = {
         partAt: (cell, level) => mechanical.partAt(cell, level),
         addItem: (itemId, count) => { inventory.add(itemId, count); },
       });
-      // M2.0-P1-B：只读目标进度服务（每帧用真实快照刷新）。
+      // M2.0-P1-B：只读目标进度服务（每帧用真实快照刷新；不对外暴露 update）。
       const goalProgress = createGoalProgress();
-      yield ctx.provide('goalProgress', goalProgress);
+      yield ctx.provide('goalProgress', {
+        snapshot: () => goalProgress.snapshot(),
+        observation: () => goalProgress.observation(),
+        state: () => goalProgress.state(),
+      });
 
       // ---- 溜槽在途物品的纯视图实体 ----
       const itemMesh = assets.create(createBoxGeometry(0.26, 0.2, 0.26).unwrap()).unwrap();
