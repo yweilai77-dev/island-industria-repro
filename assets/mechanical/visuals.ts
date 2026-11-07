@@ -203,7 +203,7 @@ export class PartViewRegistry {
     for (const { id, anchor } of anchors) {
       const entity = this.world
         .spawn(
-          { component: Transform, data: { pos: anchor, scale: [0.12, 0.12, 0.12] } },
+          { component: Transform, data: { pos: anchor, scale: [1, 1, 1] } },
           { component: MeshFilter, data: { assetHandle: assets.jointMesh } },
           { component: MeshRenderer, data: { materials: [assets.jointMaterial] } },
         )

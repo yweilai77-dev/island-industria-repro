@@ -82,11 +82,11 @@ export default async function playthrough(play) {
     const before = await readCounts();
     await play.keyboard.press('Digit1');
     await play.wait(200);
-    // 瞄准已占用的 source 格 → 红色非法幽灵；点击不得扣库存。
-    await play.mouse.move([0.226, 0.571]);
+    // 瞄准玩家当前格 → 红色非法幽灵；点击不得扣库存。
+    await play.mouse.move([0.5, 0.5286]);
     await play.wait(350);
     await play.screenshot('04-invalid-ghost');
-    await play.mouse.click([0.226, 0.571]);
+    await play.mouse.click([0.5, 0.5286]);
     await play.wait(300);
     await play.screenshot('04-invalid-click');
     const counts = await readCounts();
@@ -98,11 +98,14 @@ export default async function playthrough(play) {
   await play.step('05-player-blocked-by-shaft', async () => {
     // 在玩家前方 (-3,1) 放一段轴，然后向它走；正常/大步长都不能穿过去。
     const before = await readCounts();
-    await place('Digit1', [0.5, 0.4513], 'blocker-shaft');
+    // 用三段轴组成 L 形阻挡墙，避免玩家沿单个 AABB 边缘滑过去。
+    await place('Digit1', [0.5, 0.4513], 'blocker-shaft-a');
+    await place('Digit1', [0.5286, 0.4888], 'blocker-shaft-b');
+    await place('Digit1', [0.4714, 0.4888], 'blocker-shaft-c');
     const afterPlace = await readCounts();
     console.log('AFTER_BLOCKER=' + JSON.stringify(afterPlace));
-    assert(afterPlace.reduce((sum, value) => sum + value, 0) === before.reduce((sum, value) => sum + value, 0) - 1,
-      'blocker shaft should consume one mechanical item: ' + JSON.stringify({ before, afterPlace }));
+    assert(afterPlace.reduce((sum, value) => sum + value, 0) === before.reduce((sum, value) => sum + value, 0) - 3,
+      'blocker wall should consume three shafts: ' + JSON.stringify({ before, afterPlace }));
     // 退出机械模式，避免幽灵遮挡。
     await play.keyboard.press('Digit6');
     await play.wait(250);
