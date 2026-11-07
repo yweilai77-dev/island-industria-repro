@@ -9,11 +9,14 @@ import {
   type PartId,
 } from '../mechanical/parts.ts';
 import {
+  angularVelocity,
   buildConnections,
   matchAxial,
   matchGearMesh,
   portWorld,
 } from '../mechanical/ports.ts';
+import { SpatialIndex } from '../spatial/occupancy.ts';
+import { StructureRegistry } from '../spatial/structure.ts';
 
 function part(id: number, defId: PartId, gx: number, gz: number, rotation: 0 | 90 | 180 | 270 = 0): MechanicalPart {
   return {
@@ -88,6 +91,43 @@ describe('mechanical port geometry and signatures', () => {
     const reversed = buildConnections([small, largeReversed]);
     expect(reversed).toHaveLength(1);
     expect(reversed[0]?.ratio).toBeCloseTo(0.5, 12);
+  });
+
+  it('keeps physical angular velocity consistent with signed axes', () => {
+    const a = part(1, 'shaft', -2, 2, 0);
+    const b = part(2, 'shaft', -1, 2, 180);
+    const aPort = portWorld(a, a.def.ports[1]!);
+    const bPort = portWorld(b, b.def.ports[1]!);
+    const ratio = matchAxial(aPort, bPort)!;
+    expect(ratio).toBe(-1);
+    const omegaA = angularVelocity(aPort.axis as [number, number, number], 1);
+    const omegaB = angularVelocity(bPort.axis as [number, number, number], ratio);
+    for (let index = 0; index < 3; index += 1) {
+      expect(omegaA[index]).toBeCloseTo(omegaB[index] as number, 9);
+    }
+
+    const small = part(3, 'gear_12', -2, 2, 0);
+    const largeSame = part(4, 'gear_24', -2, 3, 0);
+    const sameMesh = matchGearMesh(
+      portWorld(small, small.def.ports.find((p) => p.id === 'mesh-b')!),
+      portWorld(largeSame, largeSame.def.ports.find((p) => p.id === 'mesh-a')!),
+    )!;
+    const omegaSmall = angularVelocity([1, 0, 0], 1);
+    const omegaLarge = angularVelocity([1, 0, 0], sameMesh);
+    expect(omegaSmall[0] * omegaLarge[0]).toBeLessThan(0);
+  });
+
+  it('uses one canonical structure id across StructureRegistry and SpatialIndex', () => {
+    const index = new SpatialIndex();
+    const structures = new StructureRegistry(index);
+    const id = structureIdForPart(7);
+    const aabb = { min: [-2, 0, 2] as [number, number, number], max: [-1, 1, 3] as [number, number, number] };
+    structures.register({ id, aabb, blocksBuild: true, blocksPlayer: true });
+    expect(structures.get('mech:7')).toBeDefined();
+    expect(index.has('structure:mech:7')).toBe(true);
+    expect(index.has('structure:mech:mech:7')).toBe(false);
+    const overlaps = index.overlapsAabb(aabb);
+    expect(overlaps.some((record) => record.id === 'structure:mech:7')).toBe(true);
   });
 
   it('does not connect by mere proximity or diagonal adjacency', () => {

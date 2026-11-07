@@ -83,11 +83,11 @@ export default async function playthrough(play) {
     const before = await readCounts();
     await play.keyboard.press('Digit1');
     await play.wait(200);
-    // 瞄准玩家当前格 → 红色非法幽灵；点击不得扣库存。
-    await play.mouse.move([0.5, 0.5286]);
+    // 瞄准楼梯占用格 (-3,3) → 红色非法幽灵；点击不得扣库存。
+    await play.mouse.move([0.441, 0.5286]);
     await play.wait(350);
     await play.screenshot('04-invalid-ghost');
-    await play.mouse.click([0.5, 0.5286]);
+    await play.mouse.click([0.441, 0.5286]);
     await play.wait(300);
     await play.screenshot('04-invalid-click');
     const counts = await readCounts();

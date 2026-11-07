@@ -135,6 +135,18 @@ export function matchGearMesh(a: WorldPort, b: WorldPort): number | undefined {
   return -(a.teeth / b.teeth) * sameDirection;
 }
 
+/**
+ * 物理角速度向量：动画/动力网络统一使用 Ω = ω · u（u 为零件有向世界轴）。
+ * 轴向 ratio=dot(uA,uB) 与啮合 ratio=-(teethA/teethB)·dot(uA,uB)
+ * 都保证连接两端用此式得到一致/正确的物理方向。
+ */
+export function angularVelocity(
+  axis: readonly [number, number, number],
+  scalar: number,
+): [number, number, number] {
+  return [axis[0] * scalar, axis[1] * scalar, axis[2] * scalar];
+}
+
 /** 从 part 端口集合构建连接；每个端口最多一条，结果按 part/port 稳定排序。 */
 export function buildConnections(parts: readonly MechanicalPart[]): readonly Connection[] {
   const ports: WorldPort[] = [];
