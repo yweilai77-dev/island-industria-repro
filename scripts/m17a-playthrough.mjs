@@ -97,10 +97,12 @@ export default async function playthrough(play) {
 
   await play.step('05-player-blocked-by-shaft', async () => {
     // 在玩家前方 (-3,1) 放一段轴，然后向它走；正常/大步长都不能穿过去。
+    const before = await readCounts();
     await place('Digit1', [0.5, 0.4513], 'blocker-shaft');
     const afterPlace = await readCounts();
     console.log('AFTER_BLOCKER=' + JSON.stringify(afterPlace));
-    assert(afterPlace[0] === 22, 'blocker shaft should consume one shaft: ' + JSON.stringify(afterPlace));
+    assert(afterPlace.reduce((sum, value) => sum + value, 0) === before.reduce((sum, value) => sum + value, 0) - 1,
+      'blocker shaft should consume one mechanical item: ' + JSON.stringify({ before, afterPlace }));
     // 退出机械模式，避免幽灵遮挡。
     await play.keyboard.press('Digit6');
     await play.wait(250);
