@@ -123,6 +123,10 @@ export default async function playthrough(play) {
     await play.keyboard.press('Escape');
     await play.wait(200);
     await play.screenshot('11-platform-adjust-cancel');
+    // 删除平台建筑（X），验证 M1.5 拆除回归
+    await play.keyboard.press('KeyX');
+    await play.wait(300);
+    await play.screenshot('11b-platform-demolished');
     // 下楼：沿 -X 回到楼梯并下到地面
     await face(2); // -X
     await walk(4.8);
@@ -136,17 +140,20 @@ export default async function playthrough(play) {
     await walk(22.0);
     await play.screenshot('13-se-corner');
     // 1×1 合法放置（瞄准玩家前方内侧地面）
-    await play.mouse.move([0.5, 0.66]);
-    await play.wait(200);
+    await play.mouse.move([0.5, 0.62]);
+    await play.wait(250);
     await play.screenshot('14-corner-ghost-valid');
-    await play.mouse.click([0.5, 0.66]);
-    await play.wait(200);
+    await play.mouse.click([0.5, 0.62]);
+    await play.wait(250);
     await play.screenshot('15-corner-placed');
-    // 2×2 在边缘 → footprint 越界，红色非法幽灵
+    // 2×2 在边缘 → footprint 越界，红色非法幽灵（避开已放置格）
     await play.keyboard.press('BracketRight');
-    await play.mouse.move([0.5, 0.66]);
-    await play.wait(200);
+    await play.mouse.move([0.48, 0.58]);
+    await play.wait(250);
     await play.screenshot('16-corner-ghost-invalid');
+    await play.mouse.click([0.48, 0.58]);
+    await play.wait(250);
+    await play.screenshot('17-corner-invalid-click');
     await play.keyboard.press('BracketLeft');
     // 边界夹紧：+Z、+X 两个方向再推
     await face(4);

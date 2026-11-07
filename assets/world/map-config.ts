@@ -195,26 +195,26 @@ export function edgeTrimBoxes(config: MapConfig): readonly EdgeTrimBox[] {
   const longX = config.groundSizeX + EDGE_TRIM.thickness;
   const longZ = config.groundSizeZ + EDGE_TRIM.thickness;
   return Object.freeze([
-    {
+    Object.freeze({
       id: 'north',
-      size: [longX, height, EDGE_TRIM.thickness],
-      pos: [0, y, -offsetZ],
-    },
-    {
+      size: Object.freeze([longX, height, EDGE_TRIM.thickness] as const),
+      pos: Object.freeze([0, y, -offsetZ] as const),
+    }),
+    Object.freeze({
       id: 'south',
-      size: [longX, height, EDGE_TRIM.thickness],
-      pos: [0, y, offsetZ],
-    },
-    {
+      size: Object.freeze([longX, height, EDGE_TRIM.thickness] as const),
+      pos: Object.freeze([0, y, offsetZ] as const),
+    }),
+    Object.freeze({
       id: 'west',
-      size: [EDGE_TRIM.thickness, height, longZ],
-      pos: [-offsetX, y, 0],
-    },
-    {
+      size: Object.freeze([EDGE_TRIM.thickness, height, longZ] as const),
+      pos: Object.freeze([-offsetX, y, 0] as const),
+    }),
+    Object.freeze({
       id: 'east',
-      size: [EDGE_TRIM.thickness, height, longZ],
-      pos: [offsetX, y, 0],
-    },
+      size: Object.freeze([EDGE_TRIM.thickness, height, longZ] as const),
+      pos: Object.freeze([offsetX, y, 0] as const),
+    }),
   ]);
 }
 
