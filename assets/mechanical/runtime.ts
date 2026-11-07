@@ -31,12 +31,7 @@ export const mechanicalRuntime: Plugin = {
       const unregisterRead = ctx.gameHost?.gameProjection?.registerRead({
         id: 'mechanical',
         title: 'Mechanical state',
-        read: () => ({
-          ...state.snapshot(),
-          hoveredPartId: mechanical.hoveredPartId(),
-          selectedPartId: mechanical.selectedPartId(),
-          cells: mechanical.parts().map((part) => ({ id: part.id, kind: part.def.kind, gx: part.placement.gx, gz: part.placement.gz })),
-        }) as unknown as GameProjectionValue,
+        read: () => state.snapshot() as unknown as GameProjectionValue,
       });
       yield () => unregisterRead?.();
 

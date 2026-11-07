@@ -35,6 +35,10 @@ export default async function playthrough(play) {
     await play.mouse.click(point);
     await play.wait(250);
   };
+  const clearHover = async () => {
+    await play.mouse.move([0.5, 0.03]);
+    await play.wait(350);
+  };
 
   await play.step('01-start', async () => {
     await read('START');
@@ -46,8 +50,7 @@ export default async function playthrough(play) {
     await place('Digit1', [0.527, 0.416], 'shaft');
     await place('Digit5', [0.5555, 0.4513], 'machine');
     await play.keyboard.press('Digit1');
-    await play.mouse.move([0.05, 0.05]);
-    await play.wait(300);
+    await clearHover();
     await play.screenshot('02-chain');
     const s = await read('CHAIN');
     assert(s.networks.length === 1 && s.networks[0].status === 'idle', 'chain should be idle before start');
@@ -63,6 +66,7 @@ export default async function playthrough(play) {
 
     await play.advance(0.5);
     const bottom = await read('BOTTOM');
+    await clearHover();
     await play.screenshot('03-ram-bottom');
     assert(bottom.machines[0].ramY < 0.7, 'ram should be at bottom half');
 
@@ -71,6 +75,7 @@ export default async function playthrough(play) {
       await play.advance(0.25);
       top = await read('SEEK_TOP_' + attempt);
     }
+    await clearHover();
     await play.screenshot('04-ram-top');
     assert(top.machines[0].ramY > 0.85, 'ram should be at top');
     assert(top.parts.find((p) => p.kind === 'shaft').angle > bottom.parts.find((p) => p.kind === 'shaft').angle,
@@ -88,6 +93,7 @@ export default async function playthrough(play) {
     const stopped2 = await read('STOPPED_FROZEN');
     assert(stopped2.machines[0]?.angle === angle, 'machine angle must freeze when source stopped');
     assert(stopped2.machines[0]?.ramY === ram, 'ram must freeze when source stopped');
+    await clearHover();
     await play.screenshot('05-source-stopped');
   });
 
@@ -101,6 +107,7 @@ export default async function playthrough(play) {
     const resumed = await read('RESUMED');
     assert(resumed.machines[0]?.angle > before, 'machine must resume from frozen angle');
     assert(resumed.machines[0]?.ramY !== beforeRam, 'ram must move after restart');
+    await clearHover();
     await play.screenshot('06-restarted');
   });
 
@@ -121,6 +128,7 @@ export default async function playthrough(play) {
     const cut2 = await read('CUT_FROZEN');
     assert(cut2.machines[0]?.angle === angle, 'machine angle must freeze after disconnection');
     assert(cut2.machines[0]?.ramY === ram, 'ram must freeze after disconnection');
+    await clearHover();
     await play.screenshot('07-disconnected');
   });
 
@@ -138,6 +146,7 @@ export default async function playthrough(play) {
     await play.advance(0.5);
     const still = await read('UNCONNECTED_FROZEN');
     assert(still.machines[0]?.ramY === ram, 'unconnected machine ram must not move');
+    await clearHover();
     await play.screenshot('08-unconnected');
   });
 
@@ -146,8 +155,7 @@ export default async function playthrough(play) {
     await place('Digit4', [0.5, 0.3827], 'source-again');
     await place('Digit2', [0.527, 0.416], 'gear');
     await play.keyboard.press('Digit1');
-    await play.mouse.move([0.05, 0.05]);
-    await play.wait(300);
+    await clearHover();
     const s = await read('GEAR_COMPONENT');
     assert(s.networks.some((n) => n.status === 'unsupported' && n.reason === 'gear-requires-c'),
       'gear component must be unsupported/gear-requires-c');
@@ -156,6 +164,7 @@ export default async function playthrough(play) {
     await play.advance(0.5);
     const frozen = await read('GEAR_FROZEN');
     assert(frozen.machines[0]?.ramY === ram, 'unsupported gear machine must stay frozen');
+    await clearHover();
     await play.screenshot('09-gear-unsupported');
   });
 }
