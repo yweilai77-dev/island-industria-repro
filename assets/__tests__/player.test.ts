@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   PLAYER_BOUNDS,
+  PLAYER_BOUNDS_X,
+  PLAYER_BOUNDS_Z,
   clampPlayerPosition,
   facingYawFor,
   moveVector,
@@ -32,10 +34,26 @@ describe('camera-relative movement', () => {
 });
 
 describe('player bounds', () => {
-  it('clamps positions to the island range', () => {
-    expect(clampPlayerPosition(12, -12)).toEqual([PLAYER_BOUNDS, -PLAYER_BOUNDS]);
-    expect(clampPlayerPosition(-12, 12)).toEqual([-PLAYER_BOUNDS, PLAYER_BOUNDS]);
+  it('derives the 32m island bounds as ±15.5', () => {
+    expect(PLAYER_BOUNDS).toBe(15.5);
+    expect(PLAYER_BOUNDS_X).toBe(15.5);
+    expect(PLAYER_BOUNDS_Z).toBe(15.5);
+  });
+
+  it('clamps positions five metres beyond the island range', () => {
+    // 20.5 = PLAYER_BOUNDS + 5，旧 10m 图会把 12 夹到 10；新图 12 是内点
+    expect(clampPlayerPosition(PLAYER_BOUNDS + 5, -(PLAYER_BOUNDS + 5))).toEqual([15.5, -15.5]);
+    expect(clampPlayerPosition(-(PLAYER_BOUNDS + 5), PLAYER_BOUNDS + 5)).toEqual([-15.5, 15.5]);
+    expect(clampPlayerPosition(20.5, 0)).toEqual([15.5, 0]);
+    expect(clampPlayerPosition(0, -20.5)).toEqual([0, -15.5]);
+    expect(clampPlayerPosition(15.5, -15.5)).toEqual([15.5, -15.5]);
+  });
+
+  it('leaves interior positions untouched, including 12 which used to be clamped', () => {
+    expect(clampPlayerPosition(12, -12)).toEqual([12, -12]);
+    expect(clampPlayerPosition(-12, 12)).toEqual([-12, 12]);
     expect(clampPlayerPosition(1.5, -2.5)).toEqual([1.5, -2.5]);
+    expect(clampPlayerPosition(0, 0)).toEqual([0, 0]);
   });
 });
 

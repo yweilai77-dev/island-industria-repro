@@ -12,11 +12,39 @@ import {
   resourceBlockedCells,
 } from '../resource/resource.ts';
 
-describe('iron ore node layout', () => {
-  it('keeps every node inside the 20x20 build area', () => {
+/** 旧 M1.5 的 20×20 地图范围（格 -10..9）；M1.6 新增节点必须落在它之外。 */
+function insideLegacy20x20(cell: { gx: number; gz: number }): boolean {
+  return cell.gx >= -10 && cell.gx <= 9 && cell.gz >= -10 && cell.gz <= 9;
+}
+
+describe('iron ore node layout (M1.6: four 2x2 nodes)', () => {
+  it('anchors A/B/C/D at their literal cells and keeps A/B unchanged', () => {
+    expect(IRON_ORE_NODES.map((node) => [node.id, node.gx, node.gz, node.w, node.d])).toEqual([
+      [1, -5, 4, 2, 2],
+      [2, 4, -5, 2, 2],
+      [3, -13, -7, 2, 2],
+      [4, 10, 10, 2, 2],
+    ]);
+    for (const node of IRON_ORE_NODES) {
+      expect(node.type).toBe('iron-ore');
+    }
+  });
+
+  it('keeps every node inside the 32x32 build area', () => {
     for (const node of IRON_ORE_NODES) {
       for (const cell of cellsOf(nodePlacement(node))) {
         expect(isBuildAreaCell(cell)).toBe(true);
+      }
+    }
+  });
+
+  it('places C and D outside the legacy 20x20 area', () => {
+    const [c, d] = IRON_ORE_NODES.slice(2);
+    expect(c).toBeDefined();
+    expect(d).toBeDefined();
+    for (const node of [c!, d!]) {
+      for (const cell of cellsOf(nodePlacement(node))) {
+        expect(insideLegacy20x20(cell)).toBe(false);
       }
     }
   });
@@ -39,9 +67,9 @@ describe('iron ore node layout', () => {
     }
   });
 
-  it('blocks exactly the node footprint cells while active', () => {
+  it('blocks exactly 16 footprint cells while active', () => {
     const blocked = resourceBlockedCells();
-    expect(blocked.size).toBe(IRON_ORE_NODES.length * 4);
+    expect(blocked.size).toBe(16);
     for (const node of IRON_ORE_NODES) {
       for (const cell of cellsOf(nodePlacement(node))) {
         expect(blocked.has(`${cell.gx},${cell.gz}`)).toBe(true);
@@ -59,10 +87,11 @@ describe('iron ore node layout', () => {
 });
 
 describe('iron ore reserves and dynamic blocking', () => {
-  it('gives both nodes 20 each for 40 total', () => {
+  it('gives four nodes 20 each for 80 total below the 99 HUD cap', () => {
     expect(IRON_ORE_MAX_AMOUNT).toBe(20);
-    expect(IRON_ORE_NODES.length).toBe(2);
-    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBe(40);
+    expect(IRON_ORE_NODES.length).toBe(4);
+    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBe(80);
+    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBeLessThanOrEqual(99);
   });
 
   it('stops blocking after a node is depleted', () => {

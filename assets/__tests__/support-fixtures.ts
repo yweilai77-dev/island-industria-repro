@@ -8,7 +8,7 @@ import {
 import { SupportRegistry } from '../spatial/support.ts';
 import { validatePlacement, type PlacementContext, type PlacementVerdict } from '../build/build.ts';
 
-/** 测试用地面支撑：覆盖整个 20×20 建造区，level 0 / y=0。 */
+/** 测试用地面支撑：覆盖 MapConfig 派生的整个建造区（当前 32×32），level 0 / y=0。 */
 export function createGroundSupports(): SupportRegistry {
   const supports = new SupportRegistry();
   const cells: Cell[] = [];

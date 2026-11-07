@@ -131,7 +131,9 @@ describe('placement validation cases used by move mode', () => {
 
   it('rejects outside the build area after rotation', () => {
     const world = createTestWorld(PLAYER_CELL);
-    expect(world.validate(createPlacement(8, 8, 2, 3, 90)).reason).toBe('out-of-bounds');
+    // (15,15) 旋转后世界足迹 3x2 越界（15..17 x 15..16）；旧 20×20 内的 (8,8) 仍合法
+    expect(world.validate(createPlacement(15, 15, 2, 3, 90)).reason).toBe('out-of-bounds');
+    expect(world.validate(createPlacement(8, 8, 2, 3, 90)).ok).toBe(true);
   });
 
   it('rejects the player cell', () => {

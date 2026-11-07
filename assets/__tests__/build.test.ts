@@ -15,11 +15,31 @@ describe('placement validation', () => {
     expect(world.validate(createPlacement(2, 3, 1, 1))).toEqual({ ok: true });
   });
 
-  it('rejects placements outside the 20x20 build area', () => {
+  it('rejects placements outside the 32x32 build area', () => {
     const world = createTestWorld(PLAYER_CELL);
-    expect(world.validate(createPlacement(-11, 0, 1, 1)).reason).toBe('out-of-bounds');
-    expect(world.validate(createPlacement(9, 9, 2, 2)).reason).toBe('out-of-bounds');
+    // 旧 20×20 边界现在合法：地图若退回 20×20，这三条会失败（回滚哨兵）
+    expect(world.validate(createPlacement(-11, 0, 1, 1)).ok).toBe(true);
+    expect(world.validate(createPlacement(9, 9, 2, 2)).ok).toBe(true);
     expect(world.validate(createPlacement(9, 9, 1, 1)).ok).toBe(true);
+    // 新边界：MIN-1 / MAX+1 越界
+    expect(world.validate(createPlacement(-17, 0, 1, 1)).reason).toBe('out-of-bounds');
+    expect(world.validate(createPlacement(16, 0, 1, 1)).reason).toBe('out-of-bounds');
+    expect(world.validate(createPlacement(0, -17, 1, 1)).reason).toBe('out-of-bounds');
+    expect(world.validate(createPlacement(0, 16, 1, 1)).reason).toBe('out-of-bounds');
+    // 锚点在 MAX 处、footprint 越界
+    expect(world.validate(createPlacement(15, 15, 2, 2)).reason).toBe('out-of-bounds');
+    expect(world.validate(createPlacement(15, 15, 2, 3)).reason).toBe('out-of-bounds');
+  });
+
+  it('accepts the 32x32 center, corners and legacy anchors (rollback sentinels)', () => {
+    const world = createTestWorld(PLAYER_CELL);
+    expect(world.validate(createPlacement(0, 0, 1, 1)).ok).toBe(true);
+    for (const [gx, gz] of [[15, 15], [-16, -16], [15, -16], [-16, 15]] as const) {
+      expect(world.validate(createPlacement(gx, gz, 1, 1)).ok).toBe(true);
+    }
+    // 旧 20×20 内的锚点也必须合法（地图若退回 20×20，这两条会失败）
+    expect(world.validate(createPlacement(10, 10, 1, 1)).ok).toBe(true);
+    expect(world.validate(createPlacement(9, 9, 2, 2)).ok).toBe(true);
   });
 
   it('rejects placements without a support surface at the target level', () => {
