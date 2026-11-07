@@ -36,6 +36,8 @@ export interface HostLike {
   readonly uiRoot?: HTMLElement;
   readonly port?: MessagePort;
   readonly app?: AppControl;
+  /** Presentation canvas; only used to suppress the browser context menu locally. */
+  readonly canvas?: HTMLCanvasElement;
 }
 
 export interface StateMessage {

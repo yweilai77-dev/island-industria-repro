@@ -42,6 +42,7 @@ import {
   createPartView,
   releaseMechanicalViewAssets,
   type MechanicalViewAssets,
+  type PartView,
 } from './visuals.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical';
@@ -56,6 +57,10 @@ export interface MechanicalService {
   partAt(cell: { gx: number; gz: number }, level: number): MechanicalPart | undefined;
   /** 事务化的位置更新（A 阶段不暴露 G，留给 B 的搬动/旋转）。 */
   updatePlacement(partId: number, next: Placement): boolean;
+  /** B runtime：只读视图访问；生命周期仍由本 pack 管理。 */
+  view(partId: number): PartView | undefined;
+  hoveredPartId(): number | undefined;
+  selectedPartId(): number | undefined;
 }
 
 declare module '@forgeax/engine/plugin' {
@@ -103,6 +108,7 @@ export const mechanicalSystem: Plugin = {
       const selection = spawnGhost(world, viewAssets.ghostMesh, viewAssets.selectionMaterial);
       let rotation: Rotation = 0;
       let selectedPartId: number | undefined;
+      let hoveredPartId: number | undefined;
 
       const hideGhost = (entity: EntityHandle): void => {
         world.set(entity, Transform, { pos: [0, HIDDEN_Y, 0] }).unwrap();
@@ -208,6 +214,9 @@ export const mechanicalSystem: Plugin = {
         connections: () => registry.connections(),
         partAt,
         updatePlacement,
+        view: (partId) => views.get(partId),
+        hoveredPartId: () => hoveredPartId,
+        selectedPartId: () => selectedPartId,
       };
 
       const selectedItem = (): ReturnType<typeof partDefForItem> => {
@@ -389,11 +398,13 @@ export const mechanicalSystem: Plugin = {
             setGhost(undefined, undefined, false);
             hideGhost(selection);
             selectedPartId = undefined;
+            hoveredPartId = undefined;
             return;
           }
           if (input.keyboard.justPressedCode('KeyR')) rotation = normalizeRotation(rotation + 90);
           if (input.keyboard.justPressedCode('Escape')) {
             selectedPartId = undefined;
+            hoveredPartId = undefined;
             setGhost(undefined, undefined, false);
             hideGhost(selection);
             return;
@@ -409,6 +420,7 @@ export const mechanicalSystem: Plugin = {
           const cameraTarget = ray && level !== undefined ? pickSupportTarget(ray, level, spatial.supports) : undefined;
           const placement = level !== undefined && cameraTarget ? placementFor(cameraTarget, level) : undefined;
           const hoverPart = hitPart(ray);
+          hoveredPartId = hoverPart;
           if (hoverPart !== undefined) {
             // 悬停在已有零件上：进入选择模式，不显示放置幽灵。
             setGhost(undefined, undefined, false);
@@ -467,6 +479,10 @@ export default definePack({
       'plugin/mechanical': {
         kind: 'plugin',
         module: { specifier: './mechanical.pack.ts', export: 'mechanicalSystem' },
+      },
+      'plugin/mechanical-runtime': {
+        kind: 'plugin',
+        module: { specifier: './runtime.pack.ts', export: 'mechanicalRuntime' },
       },
     }),
 });

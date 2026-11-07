@@ -116,6 +116,13 @@ function rolePairAllowed(a: PartPortDef['role'], b: PartPortDef['role']): boolea
 }
 
 /** 轴向连接：同轴、锚点重合、法线相反；ratio 考虑有向轴。 */
+/** 零件自身的世界有向旋转轴；当前所有零件本地轴为 X，经 Placement 旋转得到。 */
+export function worldAxis(part: MechanicalPart): [number, number, number] {
+  const port = part.def.ports[0];
+  const local = port ? localAxisVector(port.axis) : [1, 0, 0] as [number, number, number];
+  return rotateVec(local[0], local[1], local[2], (part.placement.rotation * Math.PI) / 180);
+}
+
 export function matchAxial(a: WorldPort, b: WorldPort): number | undefined {
   if (!rolePairAllowed(a.role, b.role)) return undefined;
   if (Math.abs(dot(a.axis, b.axis)) < 1 - EPS) return undefined;

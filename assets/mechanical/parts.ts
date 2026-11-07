@@ -31,6 +31,8 @@ export interface MechanicalPartDef {
   readonly height: number;
   readonly teeth?: number;
   readonly maxTorque: number;
+  /** 动力源额定转速（RPM）；B 阶段只给测试动力源使用。 */
+  readonly ratedRpm?: number;
   readonly ports: readonly PartPortDef[];
 }
 
@@ -124,6 +126,7 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     d: 1,
     height: MECH_PART_HEIGHT,
     maxTorque: 60,
+    ratedRpm: 60,
     ports: [
       { id: 'out', role: 'output', axis: 'x', face: 'px', localCell: { gx: 0, gz: 0 }, localY: PORT_HEIGHT },
     ],

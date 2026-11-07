@@ -17,6 +17,12 @@ export const frontendUi: Plugin = {
     const root = host.uiRoot;
     const port = host.port;
     const app = host.app ?? {};
+    const canvas = host.canvas;
+    const onCanvasContextMenu = (event: MouseEvent): void => {
+      // 只抑制游戏 canvas；页面其他区域保持浏览器默认右键菜单。
+      event.preventDefault();
+    };
+    canvas?.addEventListener('contextmenu', onCanvasContextMenu);
 
     const ui: UiState = {
       open: false,
@@ -421,6 +427,7 @@ export const frontendUi: Plugin = {
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('pointermove', onPointerMove, true);
       window.removeEventListener('pointerup', onPointerUp, true);
+      canvas?.removeEventListener('contextmenu', onCanvasContextMenu);
       if (port) port.onmessage = null;
       cancelDrag();
       shell.remove();

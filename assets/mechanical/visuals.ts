@@ -28,6 +28,9 @@ export interface MechanicalViewAssets {
   readonly wheelMesh: AssetHandle<'mesh'>;
   readonly ghostMesh: AssetHandle<'mesh'>;
   readonly jointMesh: AssetHandle<'mesh'>;
+  readonly rodMesh: AssetHandle<'mesh'>;
+  readonly ramMesh: AssetHandle<'mesh'>;
+  readonly markerMesh: AssetHandle<'mesh'>;
   readonly shaftMaterial: AssetHandle<'material'>;
   readonly gearMaterial: AssetHandle<'material'>;
   readonly bodyMaterial: AssetHandle<'material'>;
@@ -38,9 +41,19 @@ export interface MechanicalViewAssets {
   readonly jointMaterial: AssetHandle<'material'>;
 }
 
+export interface MachineView {
+  readonly crank: EntityHandle;
+  readonly crankPin: EntityHandle;
+  readonly rod: EntityHandle;
+  readonly ram: EntityHandle;
+}
+
 export interface PartView {
   readonly root: EntityHandle;
   readonly spinner?: EntityHandle;
+  /** spinner 的基准朝向；运行时先乘自转四元数。 */
+  readonly spinBaseQuat?: readonly [number, number, number, number];
+  readonly machine?: MachineView;
 }
 
 function overlayMaterial(color: readonly [number, number, number, number]) {
@@ -65,6 +78,9 @@ export function createMechanicalViewAssets(assets: AssetRegistry): MechanicalVie
     wheelMesh: assets.create(createCylinderGeometry(0.25, 0.25, 0.12, 16).unwrap()).unwrap(),
     ghostMesh: assets.create(createBoxGeometry(1, 1, 1).unwrap()).unwrap(),
     jointMesh: assets.create(createBoxGeometry(0.12, 0.12, 0.12).unwrap()).unwrap(),
+    rodMesh: assets.create(createBoxGeometry(0.06, 1, 0.06).unwrap()).unwrap(),
+    ramMesh: assets.create(createBoxGeometry(0.24, 0.18, 0.24).unwrap()).unwrap(),
+    markerMesh: assets.create(createBoxGeometry(0.08, 0.08, 0.08).unwrap()).unwrap(),
     shaftMaterial: assets.create(Materials.standard({ baseColor: [0.45, 0.5, 0.56, 1], metallic: 0.5, roughness: 0.45 })).unwrap(),
     gearMaterial: assets.create(Materials.standard({ baseColor: [0.72, 0.54, 0.25, 1], metallic: 0.35, roughness: 0.5 })).unwrap(),
     bodyMaterial: assets.create(Materials.standard({ baseColor: [0.24, 0.28, 0.32, 1], metallic: 0.25, roughness: 0.65 })).unwrap(),
@@ -82,6 +98,7 @@ export function releaseMechanicalViewAssets(assets: AssetRegistry, view: Mechani
     view.bodyMesh, view.wheelMesh, view.ghostMesh, view.jointMesh,
     view.shaftMaterial, view.gearMaterial, view.bodyMaterial, view.accentMaterial,
     view.ghostValidMaterial, view.ghostInvalidMaterial, view.selectionMaterial, view.jointMaterial,
+    view.rodMesh, view.ramMesh, view.markerMesh,
   ]) {
     assets.release(handle).unwrap();
   }
@@ -118,9 +135,15 @@ export function createPartView(
     .unwrap();
 
   if (part.def.kind === 'shaft') {
-    spawnChild(world, root, view.shaftMesh, view.shaftMaterial, [0, 0.5, 0]);
-    spawnChild(world, root, view.keywayMesh, view.accentMaterial, [0, 0.5 + SHAFT_RADIUS - 0.01, 0]);
-    return { root };
+    const spinner = world
+      .spawn(
+        { component: Transform, data: { pos: [0, 0.5, 0] } },
+        { component: ChildOf, data: { parent: root } },
+      )
+      .unwrap();
+    spawnChild(world, spinner, view.shaftMesh, view.shaftMaterial, [0, 0, 0]);
+    spawnChild(world, spinner, view.keywayMesh, view.accentMaterial, [0, SHAFT_RADIUS - 0.01, 0]);
+    return { root, spinner, spinBaseQuat: [0, 0, 0, 1] };
   }
 
   if (part.def.kind === 'gear') {
@@ -144,27 +167,48 @@ export function createPartView(
         [Math.cos(angle) * (GEAR_ROOT_RADIUS + 0.05), 0, Math.sin(angle) * (GEAR_ROOT_RADIUS + 0.05)],
       );
     }
-    return { root, spinner };
+    return {
+      root,
+      spinner,
+      spinBaseQuat: [align[0] ?? 0, align[1] ?? 0, align[2] ?? 0, align[3] ?? 1],
+    };
   }
 
-  // 源/机器：机体 + 轮/冲头占位。
-  spawnChild(world, root, view.bodyMesh, view.bodyMaterial, [0, 0.45, 0]);
-  const wheelAlign = quat.fromAxisAngle(quat.create(), [0, 0, 1], -Math.PI / 2);
-  const wheel = world
+  const align = quat.fromAxisAngle(quat.create(), [0, 0, 1], -Math.PI / 2);
+  const alignQuat: [number, number, number, number] = [align[0] ?? 0, align[1] ?? 0, align[2] ?? 0, align[3] ?? 1];
+
+  if (part.def.kind === 'power-source') {
+    spawnChild(world, root, view.bodyMesh, view.bodyMaterial, [0, 0.45, 0]);
+    const spinner = world
+      .spawn(
+        { component: Transform, data: { pos: [0.46, 0.5, 0], quat: alignQuat } },
+        { component: ChildOf, data: { parent: root } },
+      )
+      .unwrap();
+    spawnChild(world, spinner, view.wheelMesh, view.accentMaterial, [0, 0, 0]);
+    // 深色 marker 让旋转可见。
+    spawnChild(world, spinner, view.markerMesh, view.bodyMaterial, [0.16, 0, 0]);
+    return { root, spinner, spinBaseQuat: alignQuat };
+  }
+
+  // 冲压机：缩小机体并向右偏移，给左侧曲柄/连杆/冲头留出可见空间。
+  spawnChild(world, root, view.bodyMesh, view.bodyMaterial, [0.18, 0.25, 0], [1, 0.55, 1]);
+  const spinner = world
     .spawn(
-      {
-        component: Transform,
-        data: {
-          pos: part.def.kind === 'power-source' ? [0.46, 0.5, 0] : [-0.46, 0.5, 0],
-          quat: [wheelAlign[0] ?? 0, wheelAlign[1] ?? 0, wheelAlign[2] ?? 0, wheelAlign[3] ?? 1],
-        },
-      },
+      { component: Transform, data: { pos: [-0.30, 0.5, 0], quat: alignQuat } },
       { component: ChildOf, data: { parent: root } },
-      { component: MeshFilter, data: { assetHandle: view.wheelMesh } },
-      { component: MeshRenderer, data: { materials: [view.accentMaterial] } },
     )
     .unwrap();
-  return { root, spinner: wheel };
+  spawnChild(world, spinner, view.wheelMesh, view.gearMaterial, [0, 0, 0], [0.72, 0.72, 0.72]);
+  const crankPin = spawnChild(world, root, view.markerMesh, view.accentMaterial, [-0.30, 0.62, 0]);
+  const rod = spawnChild(world, root, view.rodMesh, view.gearMaterial, [-0.30, 0.5, 0], [1, 0.28, 1]);
+  const ram = spawnChild(world, root, view.ramMesh, view.accentMaterial, [-0.30, 0.9, 0]);
+  return {
+    root,
+    spinner,
+    spinBaseQuat: alignQuat,
+    machine: { crank: spinner, crankPin, rod, ram },
+  };
 }
 
 export class PartViewRegistry {
