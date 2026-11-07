@@ -53,7 +53,7 @@ export interface MapConfig {
   readonly cellCount: number;
   /** 格坐标是否在地图内（闭区间 + 整数校验）。 */
   containsCell(cell: Cell): boolean;
-  /** 世界点 → 地图内格；地图外/非有限值返回 undefined。 */
+  /** 世界点 → 地图内格；地图外返回 undefined；非有限输入沿用 worldToCell 抛 RangeError。 */
   buildAreaCellAt(worldX: number, worldZ: number): Cell | undefined;
   /** 地图内全部格（行优先）。返回冻结数据，调用者不能修改内部配置。 */
   cells(): readonly Cell[];
