@@ -12,6 +12,7 @@ import {
   angularVelocity,
   buildConnections,
   matchAxial,
+  worldAxis,
   matchGearMesh,
   portWorld,
 } from '../mechanical/ports.ts';
@@ -48,6 +49,12 @@ describe('mechanical port geometry and signatures', () => {
     expect(port.anchor[0]).toBeCloseTo(-1.5, 9);
     expect(port.anchor[2]).toBeCloseTo(3, 9);
     expect(port.normal[2]).toBeCloseTo(1, 9);
+  });
+
+  it('exposes one signed worldAxis entry for network and animation', () => {
+    expect(worldAxis(part(1, 'shaft', -2, 2, 0))).toEqual([1, 0, 0]);
+    expect(worldAxis(part(2, 'shaft', -2, 2, 180))).toEqual([-1, 0, 0]);
+    expect(worldAxis(part(3, 'gear_12', -2, 2, 90))[2]).toBeCloseTo(-1, 12);
   });
 
   it('connects two coaxial shafts with signed axis ratio', () => {

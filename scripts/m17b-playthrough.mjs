@@ -14,6 +14,11 @@ export default async function playthrough(play) {
     return s;
   };
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
+  const fps = async () => {
+    const text = await play.page.evaluate(() => document.body.innerText);
+    const match = text.match(/FPS ([0-9.]+)/);
+    return match ? Number(match[1]) : -1;
+  };
   const place = async (slot, point, name) => {
     await play.keyboard.press(slot);
     await play.wait(200);
@@ -42,6 +47,7 @@ export default async function playthrough(play) {
 
   await play.step('01-start', async () => {
     await read('START');
+    console.log('FPS_START=' + (await fps()));
     await play.screenshot('01-start');
   });
 
@@ -77,6 +83,7 @@ export default async function playthrough(play) {
     }
     await clearHover();
     await play.screenshot('04-ram-top');
+    console.log('FPS_RUNNING=' + (await fps()));
     assert(top.machines[0].ramY > 0.85, 'ram should be at top');
     assert(top.parts.find((p) => p.kind === 'shaft').angle > bottom.parts.find((p) => p.kind === 'shaft').angle,
       'shaft angle should increase while powered');
@@ -166,5 +173,6 @@ export default async function playthrough(play) {
     assert(frozen.machines[0]?.ramY === ram, 'unsupported gear machine must stay frozen');
     await clearHover();
     await play.screenshot('09-gear-unsupported');
+    console.log('FPS_END=' + (await fps()));
   });
 }
