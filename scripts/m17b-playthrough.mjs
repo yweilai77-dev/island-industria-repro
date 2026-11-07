@@ -157,22 +157,23 @@ export default async function playthrough(play) {
     await play.screenshot('08-unconnected');
   });
 
-  await play.step('08-gear-unsupported', async () => {
-    // 重新放源，在空出的轴位放齿轮，机器仍在；组件必须 unsupported。
+  await play.step('08-gear-powered', async () => {
+    // 重新放源，在空出的轴位放齿轮，机器仍在；M1.7-C 起齿轮正式参与传动，
+    // 该组件必须通电并让冲压机真正运动（旧行为 unsupported/gear-requires-c 已由 C 取代）。
     await place('Digit4', [0.5, 0.3827], 'source-again');
     await place('Digit2', [0.527, 0.416], 'gear');
     await play.keyboard.press('Digit1');
     await clearHover();
     const s = await read('GEAR_COMPONENT');
-    assert(s.networks.some((n) => n.status === 'unsupported' && n.reason === 'gear-requires-c'),
-      'gear component must be unsupported/gear-requires-c');
-    assert(s.machines[0]?.powered === false, 'gear machine must not pretend to run');
-    const ram = s.machines[0]?.ramY;
+    assert(s.networks.some((n) => n.status === 'powered'),
+      'gear component must be powered after M1.7-C');
+    assert(s.machines[0]?.powered === true, 'gear driven machine must run');
+    const beforeAngle = s.machines[0]?.angle ?? 0;
     await play.advance(0.5);
-    const frozen = await read('GEAR_FROZEN');
-    assert(frozen.machines[0]?.ramY === ram, 'unsupported gear machine must stay frozen');
+    const moved = await read('GEAR_MOVED');
+    assert(moved.machines[0].angle > beforeAngle, 'gear driven machine must keep moving');
     await clearHover();
-    await play.screenshot('09-gear-unsupported');
+    await play.screenshot('09-gear-powered');
     console.log('FPS_END=' + (await fps()));
   });
 }
