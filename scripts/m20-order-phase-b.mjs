@@ -170,7 +170,9 @@ export async function runOrderPhaseB(kit) {
     }
     s = await state();
     const forged = machineByRecipe(s, 'forge-shaft');
-    assert(forged.inputCount + forged.outputCount + producedOf(s, 'shaft') > 0, 'forge must receive the 2 ingots');
+    // 两个铁锭在周期开始时被整笔消耗，因此「已收到料」的证据是 progress/running，而不是 inputCount。
+    assert(forged.running === true || forged.progress > 0 || forged.inputCount > 0 || forged.outputCount > 0 || producedOf(s, 'shaft') > 0,
+      'the forge must start forging after receiving the 2 ingots');
     assert(invOf(s, 'iron_ingot') === ingots - 2, 'the forge must consume exactly 2 ingots from the inventory');
     logStep('10-FORGE-FED', { ingots, forge: snap(s).machines.find((m) => m.recipe === 'forge-shaft'), produced: s.production.produced });
     await play.screenshot('15-forge-fed');
