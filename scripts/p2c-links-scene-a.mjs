@@ -162,6 +162,7 @@ export async function runSceneA(play, h, C) {
   await play.step('05-scene-e-rotate-and-remove-port', async () => {
     let s = await state();
     const smelterId = machineOf(s, 'smelt-crushed-ore').partId;
+    const crusherId = machineOf(s, 'crush-iron-ore').partId;
     const sm = { gx: -3, gz: 8 };
     const smelterPart = () => partOf(s, smelterId);
 
