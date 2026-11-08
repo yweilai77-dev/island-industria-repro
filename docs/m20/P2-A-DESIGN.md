@@ -59,8 +59,12 @@ P2-A 只做三件事：
 - `CoreId` / `PortModuleId` / `PortSlotId` 用 TypeScript **模板字面量类型**表达
   （`\`core.${string}\``），编译期就能挡住「把 PartId 当 CoreId 用」。
 - `RecipeId` 沿用现有 `Recipe.id` 的字符串，**不改造、不迁移**（已验收的订单判定与测试依赖它）。
-- 所有新 ID 必须匹配 `/^[a-z][a-z0-9]*(?:[.\-][a-z0-9]+)+$/`；`ids.ts` 提供
-  `isStableId` / `assertStableId`，完整性校验会对每个 ID 跑一遍。
+- 所有**定义类**新 ID（`CoreId` / `PortModuleId` / `PortSlotId` / `RecipeId`）必须匹配
+  `/^[a-z][a-z0-9]*(?:[.\-][a-z0-9]+)+$/`（小写、至少两段）；`ids.ts` 提供
+  `isStableId` / `assertStableId`，完整性校验会对每个定义 ID 跑一遍。
+  运行时复合键（`20:slot.crusher.in.pz`、`link:…->…`、`assembly:1`）不是定义 ID，
+  不要求匹配该格式；它们的格式由对应的构造函数保证。
+  现有机械零件 `PartId`（`crusher`）是单段 snake_case，属于既有 ID 空间，不由本规则约束。
 
 ### 2.3 为什么给核心加 `core.` 前缀，而不是直接用 `crusher`
 
