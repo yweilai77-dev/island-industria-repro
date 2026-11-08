@@ -173,26 +173,8 @@ export async function runSceneC(play, h, C) {
     const oreBefore = countOf(s, 'iron_ore');
     const producedBeforeCrushed = producedOf(s, 'crushed_ore');
     await feedMachine({ gx: -4, gz: 8 }, crusherId, 4);
-    let split;
-    for (let tick = 0; tick < 160; tick += 1) {
-      await play.advance(0.5);
-      const now = await state();
-      const ma = machineById(now, aId);
-      const mb = machineById(now, bId);
-      if (tick % 20 === 0) {
-        console.log('C-PROGRESS=' + JSON.stringify({
-          tick,
-          a: { in: ma.inputCount, out: ma.outputCount, prod: ma.producedTotal, powered: ma.powered, block: ma.block },
-          b: { in: mb.inputCount, out: mb.outputCount, prod: mb.producedTotal, powered: mb.powered, block: mb.block },
-          links: now.links.map((link) => ({ from: link.from.entityId, to: link.to.entityId, active: link.active, status: link.status, moved: link.moved })),
-          ports: now.ports.map((port) => port.partId + ':' + port.slotId + ':' + port.count), 
-          crushed: producedOf(now, 'crushed_ore'),
-          ore: countOf(now, 'iron_ore'),
-        }));
-      }
-      if (ma.producedTotal >= 2 && mb.producedTotal >= 2) { split = { ok: true, state: now }; break; }
-      split = { ok: false, state: now };
-    }
+    const split = await waitFor((now) => machineById(now, aId).producedTotal >= 2
+      && machineById(now, bId).producedTotal >= 2, 90, 'scene-c-split');
     s = split.state;
     console.log('SCENE-C-SPLIT=' + JSON.stringify({
       produced: s.production.produced,
