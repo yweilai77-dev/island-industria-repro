@@ -63,13 +63,13 @@ function definePortModule(spec: PortModuleSpec): PortModuleDef {
 /**
  * 全部接口盒定义（只读、冻结）。
  *
- * 三种方向（任务书 §3.2）：
- * - `port.through`  基础直通盒：1 输入 1 输出，输入位与输出位都能装；
+ * 四种功能（任务书 P2-C-1/4/5）：
+ * - `port.through`  基础直通盒：1 输入 1 输出，输入位与输出位都能装（P2-B 起是真实物品）；
+ * - `port.output`   输出接口盒：1 输入 1 输出，**只能装输出位**（P2-C 新增，与输入能力明确区分）；
  * - `port.splitter` 分流盒：1 输入 2 输出，装在机器**输出位**，把产物分到两条下游；
  * - `port.merger`   合流盒：2 输入 1 输出，装在机器**输入位**，把两路来料合入机器。
  *
- * P2-B 只把 `port.through` 接入真实物品（`interface_box`）；分流/合流盒属于 P2-C 的拓扑能力，
- * 仍是纯定义、`itemId` 为 null，玩家拿不到也装不上。
+ * P2-C 起四种都绑定真实物品（可制造、可安装、可拆卸）。
  */
 export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
   definePortModule({
@@ -82,13 +82,22 @@ export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
     itemId: ITEM_IDS.INTERFACE_BOX,
   }),
   definePortModule({
+    name: 'output',
+    label: '输出接口盒',
+    kind: 'through',
+    inputs: 1,
+    outputs: 1,
+    fitsSlotRoles: ['output'],
+    itemId: ITEM_IDS.OUTPUT_INTERFACE_BOX,
+  }),
+  definePortModule({
     name: 'splitter',
     label: '分流盒',
     kind: 'splitter',
     inputs: 1,
     outputs: 2,
     fitsSlotRoles: ['output'],
-    itemId: null,
+    itemId: ITEM_IDS.SPLITTER_BOX,
   }),
   definePortModule({
     name: 'merger',
@@ -97,13 +106,18 @@ export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
     inputs: 2,
     outputs: 1,
     fitsSlotRoles: ['input'],
-    itemId: null,
+    itemId: ITEM_IDS.MERGER_BOX,
   }),
 ]);
 
 /** 按 ID 查接口盒定义；未注册返回 undefined。 */
 export function portModuleOfId(id: PortModuleId): PortModuleDef | undefined {
   return PORT_MODULES.find((module) => module.id === id);
+}
+
+/** 按绑定的真实物品反查接口盒定义；不是接口盒物品返回 undefined。 */
+export function portModuleForItem(itemId: ItemId): PortModuleDef | undefined {
+  return PORT_MODULES.find((module) => module.itemId === itemId);
 }
 
 /** 给定安装位方向，返回可装在该位的接口盒（P2-B 的安装校验会用到）。 */

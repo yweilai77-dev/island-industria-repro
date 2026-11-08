@@ -12,10 +12,7 @@ import {
   type MachineState,
 } from '../production/production.ts';
 import {
-  FORGE_CHUTE_RECIPE,
-  FORGE_INTERFACE_BOX_RECIPE,
   FORGE_SHAFT_RECIPE,
-  FORGE_VERTICAL_DRIVE_RECIPE,
   MACHINE_RECIPES,
 } from '../production/recipes.ts';
 
@@ -161,22 +158,32 @@ describe('M1.8-C machine state machine', () => {
   });
 
   it('cycles the forge recipe only when the cycle has not consumed input', () => {
-    // P2-B：锻压机新增「锻压基础接口盒」配方，列表 3 → 4；前三条顺序保持不变。
-    expect(MACHINE_RECIPES.forge).toHaveLength(4);
+    // P2-C：锻压机新增输出/分流/合流接口盒与三种加工核心复制配方，列表 4 → 10；
+    // 既有 4 条顺序保持不变（历史验收脚本按这个顺序记 R 的按法）。
+    expect(MACHINE_RECIPES.forge).toHaveLength(10);
+    expect(MACHINE_RECIPES.forge?.map((recipe) => recipe.id)).toEqual([
+      'forge-shaft',
+      'forge-vertical-drive',
+      'forge-chute',
+      'forge-interface-box',
+      'forge-output-box',
+      'forge-splitter-box',
+      'forge-merger-box',
+      'forge-crusher',
+      'forge-smelter',
+      'forge-processing-core',
+    ]);
     const state = createMachineState(1);
     expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_SHAFT_RECIPE.id);
     expect(canSwitchRecipe(state)).toBe(true);
 
-    expect(cycleRecipe(state, FORGE)).toBe(true);
-    expect(state.recipeIndex).toBe(1);
-    expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_VERTICAL_DRIVE_RECIPE.id);
-
-    expect(cycleRecipe(state, FORGE)).toBe(true);
-    expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_CHUTE_RECIPE.id);
-
-    expect(cycleRecipe(state, FORGE)).toBe(true);
-    expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_INTERFACE_BOX_RECIPE.id);
-
+    // 完整回绕一圈：每条配方都能切到，最后回到第一条（比逐个硬编码更抗新增）。
+    const forgeRecipes = MACHINE_RECIPES.forge ?? [];
+    for (let step = 1; step < forgeRecipes.length; step += 1) {
+      expect(cycleRecipe(state, FORGE)).toBe(true);
+      expect(state.recipeIndex).toBe(step);
+      expect(activeRecipe(state, FORGE)?.id).toBe(forgeRecipes[step]?.id);
+    }
     expect(cycleRecipe(state, FORGE)).toBe(true);
     expect(state.recipeIndex).toBe(0);
     expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_SHAFT_RECIPE.id);

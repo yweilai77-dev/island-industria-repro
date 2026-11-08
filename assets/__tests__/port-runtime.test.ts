@@ -45,12 +45,17 @@ describe('安装与占用', () => {
       .toEqual({ ok: false, reason: 'module-not-installable' });
   });
 
-  it('还没接入真实物品的接口盒不能安装（分流/合流盒属于 P2-C）', () => {
+  it('P2-C：输出盒只能装输出位，分流盒只能输出位，合流盒只能输入位', () => {
     const runtime = new PortRuntime();
-    expect(runtime.install(1, CRUSHER, CRUSHER_OUT, 'port.splitter'))
-      .toEqual({ ok: false, reason: 'module-not-a-real-item' });
-    expect(runtime.install(1, CRUSHER, CRUSHER_IN, 'port.merger'))
-      .toEqual({ ok: false, reason: 'module-not-a-real-item' });
+    expect(runtime.install(1, CRUSHER, CRUSHER_OUT, 'port.output')).toEqual({ ok: true });
+    expect(runtime.install(1, CRUSHER, CRUSHER_IN, 'port.output'))
+      .toEqual({ ok: false, reason: 'module-not-installable' });
+    expect(runtime.install(2, FORGE, 'slot.forge.out.px', 'port.splitter')).toEqual({ ok: true });
+    expect(runtime.install(2, FORGE, 'slot.forge.in.nz', 'port.splitter'))
+      .toEqual({ ok: false, reason: 'module-not-installable' });
+    expect(runtime.install(3, CRUSHER, CRUSHER_IN, 'port.merger')).toEqual({ ok: true });
+    expect(runtime.install(3, CRUSHER, CRUSHER_OUT, 'port.merger'))
+      .toEqual({ ok: false, reason: 'module-not-installable' });
   });
 
   it('不同机器上的安装位互不影响', () => {

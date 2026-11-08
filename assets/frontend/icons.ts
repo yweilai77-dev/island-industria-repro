@@ -168,6 +168,44 @@ const INTERFACE_BOX_SVG = [
   '</svg>',
 ].join('');
 
+// P2-C：输出接口盒。沿用接口盒机身，接口环改成朝外的箭头（表示只输出）。
+const OUTPUT_INTERFACE_BOX_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="12" y="18" width="40" height="30" rx="4" fill="#5a6b7c" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="18" y="24" width="18" height="18" rx="3" fill="#33414f" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="24" cy="33" r="4.5" fill="#5fb0d9" stroke="#1e465c" stroke-width="2"/>',
+  '<path d="M33 33h13m0 0-4-4m4 4-4 4" fill="none" stroke="#5fb0d9" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>',
+  '<rect x="20" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="38" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+// P2-C：分流接口盒（一进二出）。
+const SPLITTER_BOX_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="12" y="18" width="40" height="30" rx="4" fill="#5a6b7c" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="21" cy="33" r="4" fill="#c9d6e2" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="43" cy="25" r="4" fill="#7fd08a" stroke="#234a2c" stroke-width="2"/>',
+  '<circle cx="43" cy="41" r="4" fill="#7fd08a" stroke="#234a2c" stroke-width="2"/>',
+  '<path d="M25 33h8m0 0 4-8m-4 8 4 8" fill="none" stroke="#c9d6e2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
+  '<rect x="20" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="38" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
+// P2-C：合流接口盒（二进一出）。
+const MERGER_BOX_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="12" y="18" width="40" height="30" rx="4" fill="#5a6b7c" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="21" cy="25" r="4" fill="#c58ad9" stroke="#48254f" stroke-width="2"/>',
+  '<circle cx="21" cy="41" r="4" fill="#c58ad9" stroke="#48254f" stroke-width="2"/>',
+  '<circle cx="43" cy="33" r="4" fill="#c9d6e2" stroke="#2c3035" stroke-width="2"/>',
+  '<path d="M25 25l8 8m-8 8 8-8" fill="none" stroke="#c9d6e2" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
+  '<rect x="20" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="38" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
 const PLACEHOLDER_SVG = [
   '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
   '<rect x="12" y="12" width="40" height="40" rx="8" fill="#3a4a5c" stroke="#22303d" stroke-width="2"/>',
@@ -208,6 +246,12 @@ export function itemIconSvg(iconKey: string): string {
       return CHUTE_SVG;
     case 'interface_box':
       return INTERFACE_BOX_SVG;
+    case 'output_interface_box':
+      return OUTPUT_INTERFACE_BOX_SVG;
+    case 'splitter_box':
+      return SPLITTER_BOX_SVG;
+    case 'merger_box':
+      return MERGER_BOX_SVG;
     default:
       return PLACEHOLDER_SVG;
   }

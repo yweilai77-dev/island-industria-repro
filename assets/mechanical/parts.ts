@@ -330,6 +330,9 @@ export const MECHANICAL_ITEM_IDS: readonly ItemId[] = Object.freeze(
 /**
  * 开局原型套件（数量有限，拆除返还）。
  * M1.8：新增零件只给到「刚好搭出一条完整生产链」的量，扩充要靠铁锭在锻压机上制造。
+ * P2-C：破碎机 / 熔炼炉各给 2 台 —— 多核心物料网络（合流需要两台同种上游、
+ * 分流需要两台同种下游）没有这个最小数量就搭不出来；锻压机仍只给 1 台。
+ * 更多的加工核心可以从锻压机的新配方（forge-crusher / forge-smelter / forge-processing-core）制造。
  */
 export const PROTOTYPE_KIT: Readonly<Record<PartId, number>> = Object.freeze({
   shaft: 24,
@@ -339,8 +342,8 @@ export const PROTOTYPE_KIT: Readonly<Record<PartId, number>> = Object.freeze({
   machine: 5,
   chute: 3,
   vertical_drive: 2,
-  crusher: 1,
-  smelter: 1,
+  crusher: 2,
+  smelter: 2,
   forge: 1,
   flywheel_source: 1,
 });

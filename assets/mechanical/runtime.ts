@@ -69,10 +69,10 @@ export const mechanicalRuntime: Plugin = {
     ctx.effect(function* () {
       const state = new MechanicalRuntimeState();
       const readout = createMechanicalReadout(world, assets, camera);
-      // P2-B：自动输入的合法入口是「装在该机器输入安装位上的接口盒」。
+      // P2-B/P2-C：自动输入/输出与物料连接都经由接口盒服务。
       // 方向必须对得上：溜槽的输送方向必须正好从安装位所在的面外侧推进来，
       // 不是「两个物体相邻就自动连上」。实现与集成测试共用 port-flow.ts。
-      const portFlow = createPortFlowGateway(ports);
+      const portFlow = createPortFlowGateway(ports, { step: () => ports.stepLinks() });
       const production = new ProductionRuntime({
         partAt: (cell, level) => mechanical.partAt(cell, level),
         addItem: (itemId, count) => { inventory.add(itemId, count); },
@@ -123,6 +123,8 @@ export const mechanicalRuntime: Plugin = {
           production: production.snapshot(),
           // P2-B：接口盒安装状态与盒内缓冲（唯一 read 的一部分，不新增第二个 read）。
           ports: ports.snapshot(),
+          // P2-C：核心间物料连接（稳定 ID、容量、实时状态、累计传递件数）。
+          links: ports.links(),
           inventory: inventorySnapshot,
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],

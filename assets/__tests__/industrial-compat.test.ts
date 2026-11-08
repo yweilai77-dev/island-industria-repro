@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPlacement } from '../grid/grid.ts';
 import { INDUSTRIAL_CATALOG, coreForPart, recipeOfId } from '../industrial/catalog.ts';
-import { itemDefinitions } from '../items/items.ts';
+import { getItemDefinition, itemDefinitions } from '../items/items.ts';
 import {
   MECHANICAL_PART_DEFS,
   PRODUCTION_MACHINE_IDS,
@@ -73,12 +73,19 @@ describe('工业数据 ↔ 现有配方', () => {
       const expected = recipesFor(core.corePartId).map((recipe) => recipe.id);
       expect(core.recipeIds).toEqual(expected);
     }
-    // 锻压机有 4 条配方（P2-B 追加了基础接口盒），切换顺序是历史验收行为，不能变。
+    // 锻压机有 10 条配方（P2-B 追加基础接口盒；P2-C 追加输出/分流/合流盒与三种核心复制配方），
+    // 切换顺序是历史验收行为，前 4 条不能变。
     expect(coreForPart('forge')?.recipeIds).toEqual([
       'forge-shaft',
       'forge-vertical-drive',
       'forge-chute',
       'forge-interface-box',
+      'forge-output-box',
+      'forge-splitter-box',
+      'forge-merger-box',
+      'forge-crusher',
+      'forge-smelter',
+      'forge-processing-core',
     ]);
   });
 
@@ -155,20 +162,42 @@ describe('工业数据 ↔ 现有物料方向', () => {
   });
 });
 
-describe('接口盒物品接入（P2-B）', () => {
-  it('物品总数 15：新增的只有基础接口盒', () => {
-    expect(itemDefinitions()).toHaveLength(15);
+describe('接口盒物品接入（P2-C）', () => {
+  it('物品总数 18：新增输出/分流/合流三种接口盒', () => {
+    expect(itemDefinitions()).toHaveLength(18);
   });
 
-  it('基础直通盒绑定真实物品，分流/合流盒仍未绑定（P2-C）', () => {
-    expect(recipeOfId('forge-interface-box')?.recipe.outputs).toEqual([
-      { itemId: 'interface_box', count: 1 },
-    ]);
-    expect(INDUSTRIAL_CATALOG.portModules.find((module) => module.id === 'port.through')?.itemId)
-      .toBe('interface_box');
+  it('四种接口盒全部绑定真实物品，且分属明确的输入/输出功能', () => {
+    const byId = new Map(INDUSTRIAL_CATALOG.portModules.map((module) => [module.id, module]));
+    expect(byId.get('port.through')?.itemId).toBe('interface_box');
+    expect(byId.get('port.output')?.itemId).toBe('output_interface_box');
+    expect(byId.get('port.splitter')?.itemId).toBe('splitter_box');
+    expect(byId.get('port.merger')?.itemId).toBe('merger_box');
     for (const module of INDUSTRIAL_CATALOG.portModules) {
-      if (module.id === 'port.through') continue;
-      expect(module.itemId).toBeNull();
+      expect(module.itemId).not.toBeNull();
+      expect(getItemDefinition(module.itemId ?? 'iron_ore')).toBeDefined();
     }
+    // 输入/输出是明确区分的功能类型：输出盒不能装输入位，合流盒不能装输出位。
+    expect(byId.get('port.output')?.fitsSlotRoles).toEqual(['output']);
+    expect(byId.get('port.splitter')?.fitsSlotRoles).toEqual(['output']);
+    expect(byId.get('port.merger')?.fitsSlotRoles).toEqual(['input']);
+  });
+
+  it('新接口盒都能由锻压机真实制造', () => {
+    expect(recipeOfId('forge-output-box')?.recipe.outputs).toEqual([
+      { itemId: 'output_interface_box', count: 1 },
+    ]);
+    expect(recipeOfId('forge-splitter-box')?.recipe.outputs).toEqual([
+      { itemId: 'splitter_box', count: 1 },
+    ]);
+    expect(recipeOfId('forge-merger-box')?.recipe.outputs).toEqual([
+      { itemId: 'merger_box', count: 1 },
+    ]);
+  });
+
+  it('加工核心复制配方只产出既有零件，不新增机器种类', () => {
+    expect(recipeOfId('forge-crusher')?.recipe.outputs).toEqual([{ itemId: 'crusher', count: 1 }]);
+    expect(recipeOfId('forge-smelter')?.recipe.outputs).toEqual([{ itemId: 'smelter', count: 1 }]);
+    expect(recipeOfId('forge-processing-core')?.recipe.outputs).toEqual([{ itemId: 'forge', count: 1 }]);
   });
 });

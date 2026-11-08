@@ -82,6 +82,66 @@ export const FORGE_INTERFACE_BOX_RECIPE: Recipe = {
   seconds: 5,
 };
 
+/**
+ * P2-C：锻压接口盒三件套（输出 / 分流 / 合流）。
+ * 与 P2-B 一样只消耗铁锭，不引入科技解锁；追加在列表末尾，已有配方的 R 切换下标不变。
+ */
+export const FORGE_OUTPUT_BOX_RECIPE: Recipe = {
+  id: 'forge-output-box',
+  label: '锻压输出接口盒',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 2 }],
+  outputs: [{ itemId: ITEM_IDS.OUTPUT_INTERFACE_BOX, count: 1 }],
+  seconds: 5,
+};
+
+export const FORGE_SPLITTER_BOX_RECIPE: Recipe = {
+  id: 'forge-splitter-box',
+  label: '锻压分流接口盒',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 3 }],
+  outputs: [{ itemId: ITEM_IDS.SPLITTER_BOX, count: 1 }],
+  seconds: 6,
+};
+
+export const FORGE_MERGER_BOX_RECIPE: Recipe = {
+  id: 'forge-merger-box',
+  label: '锻压合流接口盒',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 3 }],
+  outputs: [{ itemId: ITEM_IDS.MERGER_BOX, count: 1 }],
+  seconds: 6,
+};
+
+/**
+ * P2-C：加工核心复制配方。
+ *
+ * 为什么 P2-C 必须补这三条：多核心生产线（合流需要两台同种上游、分流需要两台同种下游、
+ * 多级产线需要三台核心）在当前内容里只有开局各 1 台，没有获取更多核心的途径。
+ * 这三条沿用**既有锻造工艺**，只是新增配方数据，不新增工艺、不改配方结构，
+ * 也不改任何已有机器的加工行为。
+ */
+export const FORGE_CRUSHER_RECIPE: Recipe = {
+  id: 'forge-crusher',
+  label: '锻压破碎机',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 6 }],
+  outputs: [{ itemId: ITEM_IDS.CRUSHER, count: 1 }],
+  seconds: 8,
+};
+
+export const FORGE_SMELTER_RECIPE: Recipe = {
+  id: 'forge-smelter',
+  label: '锻压熔炼炉',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 7 }],
+  outputs: [{ itemId: ITEM_IDS.SMELTER, count: 1 }],
+  seconds: 9,
+};
+
+export const FORGE_CORE_RECIPE: Recipe = {
+  id: 'forge-processing-core',
+  label: '锻压锻压机',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 8 }],
+  outputs: [{ itemId: ITEM_IDS.FORGE, count: 1 }],
+  seconds: 10,
+};
+
 /** 每台机器的配方列表；`recipeIndex` 是玩家用 R 切换的下标。 */
 export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>>> = Object.freeze({
   crusher: Object.freeze([CRUSH_RECIPE]),
@@ -91,6 +151,12 @@ export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>
     FORGE_VERTICAL_DRIVE_RECIPE,
     FORGE_CHUTE_RECIPE,
     FORGE_INTERFACE_BOX_RECIPE,
+    FORGE_OUTPUT_BOX_RECIPE,
+    FORGE_SPLITTER_BOX_RECIPE,
+    FORGE_MERGER_BOX_RECIPE,
+    FORGE_CRUSHER_RECIPE,
+    FORGE_SMELTER_RECIPE,
+    FORGE_CORE_RECIPE,
   ]),
 });
 

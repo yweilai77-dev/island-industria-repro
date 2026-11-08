@@ -1,17 +1,13 @@
-import { Update, type EntityHandle } from '@forgeax/engine/ecs';
-import { createBoxGeometry } from '@forgeax/engine/geometry';
+import { Update } from '@forgeax/engine/ecs';
 import { INPUT_SNAPSHOT_RESOURCE_KEY, type InputSnapshot } from '@forgeax/engine/input';
-import { quat } from '@forgeax/engine/math';
 import { definePack } from '@forgeax/engine/pack/source';
 import type { Plugin } from '@forgeax/engine/plugin';
-import { Materials, MeshFilter, MeshRenderer } from '@forgeax/engine/render';
-import { Transform } from '@forgeax/engine/scene';
 import { ok } from '@forgeax/engine/types';
 import type {} from '@forgeax/engine/assets-runtime';
 import type {} from '@forgeax/engine/app';
 import { normalizeRotation, withRotation } from '../grid/grid.ts';
 import type {} from '../inventory/inventory.ts';
-import { ITEM_IDS } from '../items/items.ts';
+import { ITEM_IDS, type ItemId } from '../items/items.ts';
 import type {} from '../player/player.ts';
 import { FLOOR_MODE_KEY } from '../build/floors.ts';
 import { BUILD_SYSTEM_NAME } from '../build/target.ts';
@@ -19,48 +15,50 @@ import type {} from '../mechanical/mechanical.pack.ts';
 import { isProductionMachine, type MechanicalPart } from '../mechanical/parts.ts';
 import { coreForPart } from './catalog.ts';
 import { PACKAGE_IDS } from '../shared/asset-refs.ts';
-import { PortRuntime } from './port-runtime.ts';
-import { slotWorldOf } from './port-slot-world.ts';
+import type { PortModuleId, PortSlotId } from './ids.ts';
+import type { LinkScene } from './link-runtime.ts';
+import { MaterialLinkRuntime } from './link-runtime.ts';
+import { portModuleOfId } from './port-module.ts';
+import { PortRuntime, type InstalledPort } from './port-runtime.ts';
+import { PortViewRegistry } from './port-views.ts';
 import type {} from './ports.ts';
 import type { PortService } from './ports.ts';
 
 /**
- * M2.0-P2-B 接口盒插件：让接口盒真正参与游戏运行。
+ * M2.0-P2-C 接口盒与物料连接插件（在 P2-B 的输入接口盒基础上扩展）。
  *
- * 职责（只做 P2-B 授权范围内的事）：
- * 1. 持有接口盒运行时状态（哪个安装位装了什么盒、盒里压着多少物料）；
- * 2. 提供 `ports` 服务给加工运行时（自动输入的合法入口）；
- * 3. 把已安装的接口盒在世界里画出来，并**每帧**按机器当前 Placement 重算位置/朝向，
- *    所以旋转或搬动加工核心后盒子会跟着走（要求 2.8）；
- * 4. 安装 / 拆卸 / 旋转加工核心三个玩家操作；
- * 5. 机器被拆掉时把它的接口盒与缓冲里的物料全部交回库存（不丢物品）。
+ * 职责：
+ * 1. 持有接口盒运行时（输入/输出位）与物料连接运行时；
+ * 2. 提供 `ports` 服务给加工运行时：自动输入、自动输出、连接推进与读投影；
+ * 3. 世界表现：接口盒按功能分色、物料连接画成铜管、建链源头高亮；
+ * 4. 玩家操作（均为新增键，不与现有键位冲突）：
+ *      T  给悬停核心的输入安装位装「基础接口盒」
+ *      O  给悬停核心的输出安装位装「输出接口盒」
+ *      K  给悬停核心的输出安装位装「分流接口盒」
+ *      L  给悬停核心的输入安装位装「合流接口盒」
+ *      Y  拆下悬停核心上的接口盒（优先输入位，其次输出位；返还物品与盒内物料）
+ *      J  建立物料连接：先悬停上游核心按 J 选中输出接口，再悬停下游核心按 J 连到它的输入接口；
+ *         再按一次 J 可取消选中
+ *      H  解除悬停核心上的全部物料连接
+ *      U  旋转悬停/选中的加工核心（P2-B 已有，安装位与连接随之更新）
+ * 5. 机器被拆掉时：接口盒与缓冲物料交回库存，相关连接清除（不丢物品）。
  *
- * 本插件**不**实现：核心间物流、分流/合流拓扑、组合机械、科技树（P2-C 及以后）。
- *
- * 操作键（P2-B 新增，均不与既有按键冲突——现有已用 A/C/D/E/F/G/Q/R/S/V/W/X/Delete/Backspace/1-0-=[]）：
- *   T  给悬停的加工核心安装一个基础接口盒（消耗背包里的真实物品）
- *   Y  拆下悬停加工核心上已装的接口盒（返还物品，盒内物料一并交回）
- *   U  旋转悬停/选中的加工核心 90°（安装位与已装接口盒随之更新）
- *
- * 为什么安装走背包而不是快捷栏：快捷栏 12 格已被 11 种机械零件占满（索引 5 必须保持空槽，
- * 历史验收脚本依赖它退出机械模式），并且任务书要求「从背包选择接口盒」。
+ * 本插件**不**实现：组合机械、科技树、传送带网络、跨层物流（P2-D 及以后）。
  */
 
 const SYSTEM_NAME = 'island-industria/port';
-/** 开局原型套件：给 2 个基础接口盒，让玩家在还没有锻压机时也能验证安装与自动输入。 */
 const PORT_KIT_KEY = 'IslandIndustriaPortKitGranted';
-const PORT_KIT_COUNT = 2;
-const HIDDEN_Y = -1000;
-const DEG = Math.PI / 180;
+/** 开局原型套件：给足搭多核心生产线的最小盒数（与既有「开局给一批零件」一致）。 */
+const PORT_KIT: readonly (readonly [ItemId, number])[] = Object.freeze([
+  [ITEM_IDS.INTERFACE_BOX, 4],
+  [ITEM_IDS.OUTPUT_INTERFACE_BOX, 3],
+  [ITEM_IDS.SPLITTER_BOX, 1],
+  [ITEM_IDS.MERGER_BOX, 1],
+]);
 
-interface PortView {
-  readonly body: EntityHandle;
-  readonly accent: EntityHandle;
-}
-
-function yawQuat(degrees: number): readonly [number, number, number, number] {
-  const value = quat.fromAxisAngle(quat.create(), [0, 1, 0], degrees * DEG);
-  return [value[0] ?? 0, value[1] ?? 0, value[2] ?? 0, value[3] ?? 1];
+interface EquippedPortWindow {
+  readonly partId: number;
+  readonly slotId: PortSlotId;
 }
 
 export const industrialPorts: Plugin = {
@@ -75,107 +73,47 @@ export const industrialPorts: Plugin = {
 
     ctx.effect(function* () {
       const runtime = new PortRuntime();
-      // 尺寸按「1×1 机器上一眼能认出」标定：机身 0.42×0.30×0.22 嵌在安装面上，
-      // 琥珀色的接口口再向外凸 0.19m —— 玩家能直接看出盒子装在哪一面、朝哪边进料。
-      const bodyMesh = assets.create(createBoxGeometry(0.42, 0.30, 0.22).unwrap()).unwrap();
-      const accentMesh = assets.create(createBoxGeometry(0.20, 0.16, 0.14).unwrap()).unwrap();
-      const bodyMaterial = assets.create(
-        Materials.standard({ baseColor: [0.52, 0.57, 0.62, 1], metallic: 0.55, roughness: 0.42 }),
-      ).unwrap();
-      const accentMaterial = assets.create(
-        Materials.standard({ baseColor: [0.85, 0.6, 0.2, 1], metallic: 0.4, roughness: 0.45 }),
-      ).unwrap();
+      const links = new MaterialLinkRuntime();
+      const views = new PortViewRegistry(world, assets);
       yield () => {
-        assets!.release(bodyMesh).unwrap();
-        assets!.release(accentMesh).unwrap();
-        assets!.release(bodyMaterial).unwrap();
-        assets!.release(accentMaterial).unwrap();
-      };
-
-      const views = new Map<string, PortView>();
-      const viewKey = (partId: number, slotId: string): string => `${partId}:${slotId}`;
-
-      const spawnView = (partId: number, slotId: string): PortView => {
-        const body = world
-          .spawn(
-            { component: Transform, data: { pos: [0, HIDDEN_Y, 0], scale: [1, 1, 1] } },
-            { component: MeshFilter, data: { assetHandle: bodyMesh } },
-            { component: MeshRenderer, data: { materials: [bodyMaterial] } },
-          )
-          .unwrap();
-        const accent = world
-          .spawn(
-            { component: Transform, data: { pos: [0, HIDDEN_Y, 0], scale: [1, 1, 1] } },
-            { component: MeshFilter, data: { assetHandle: accentMesh } },
-            { component: MeshRenderer, data: { materials: [accentMaterial] } },
-          )
-          .unwrap();
-        const view = { body, accent };
-        views.set(viewKey(partId, slotId), view);
-        return view;
+        views.dispose(assets!);
+        runtime.clear();
+        links.clear();
       };
 
       const grantKit = (): void => {
         if (world.hasResource(PORT_KIT_KEY)) return;
-        inventory.add(ITEM_IDS.INTERFACE_BOX, PORT_KIT_COUNT);
+        for (const [itemId, count] of PORT_KIT) inventory.add(itemId, count);
         world.insertResource(PORT_KIT_KEY, 1);
       };
       grantKit();
 
+      const sceneOf = (parts: readonly MechanicalPart[] = mechanical.parts()): LinkScene => {
+        const byId = new Map<number, MechanicalPart>();
+        for (const part of parts) byId.set(part.id, part);
+        return {
+          partOf: (partId) => byId.get(partId),
+          portOf: (partId, slotId) => runtime.get(partId, slotId),
+        };
+      };
+
       const service: PortService = {
         installedOf: (partId) => runtime.installedOf(partId),
         inputBoxesOf: (partId) => runtime.inputBoxesOf(partId),
+        outputBoxesOf: (partId) => runtime.outputBoxesOf(partId),
         accept: (partId, slotId, itemId) => runtime.accept(partId, slotId, itemId),
         drain: (partId, tryInsert) => runtime.drain(partId, tryInsert),
+        bufferOf: (partId, slotId) => runtime.bufferOf(partId, slotId),
+        stepLinks: () => links.step(sceneOf(), runtime),
+        links: () => links.snapshot(sceneOf()),
+        createLink: (from, to) => links.create(from, to, sceneOf()),
+        removeLinksAt: (partId, slotId) => links.removeAt(partId, slotId),
         snapshot: () => runtime.snapshot(),
       };
       yield ctx.provide('ports', service);
 
-      /** 机器被拆掉：接口盒与盒内物料全部交回库存。 */
-      const syncRemovedMachines = (parts: readonly MechanicalPart[]): void => {
-        const alive = new Set(parts.map((part) => part.id));
-        for (const removed of runtime.sync(alive)) {
-          for (const item of removed.items) inventory.add(item.itemId, item.count);
-        }
-      };
-
-      /** 每帧按机器当前 Placement 重算接口盒世界位置（旋转/搬动后自动跟随）。 */
-      const updateViews = (parts: readonly MechanicalPart[]): void => {
-        const byId = new Map<number, MechanicalPart>();
-        for (const part of parts) byId.set(part.id, part);
-        const alive = new Set<string>();
-        for (const partId of [...byId.keys()].sort((a, b) => a - b)) {
-          const part = byId.get(partId);
-          if (!part) continue;
-          for (const port of runtime.installedOf(partId)) {
-            const key = viewKey(partId, port.slot.id);
-            alive.add(key);
-            const view = views.get(key) ?? spawnView(partId, port.slot.id);
-            const slot = slotWorldOf(part, port.slot);
-            const rotation = yawQuat(slot.yaw);
-            world.set(view.body, Transform, {
-              pos: [slot.center[0], slot.center[1], slot.center[2]],
-              quat: rotation,
-              scale: [1, 1, 1],
-            }).unwrap();
-            world.set(view.accent, Transform, {
-              pos: [
-                slot.center[0] + slot.outward[0] * 0.19,
-                slot.center[1] + slot.outward[1] * 0.19,
-                slot.center[2] + slot.outward[2] * 0.19,
-              ],
-              quat: rotation,
-              scale: [1, 1, 1],
-            }).unwrap();
-          }
-        }
-        for (const [key, view] of [...views]) {
-          if (alive.has(key)) continue;
-          views.delete(key);
-          world.despawn(view.body).unwrap();
-          world.despawn(view.accent).unwrap();
-        }
-      };
+      /** 建链时选中的上游输出接口（世界表现用一个绿色标记标出）。 */
+      let armed: EquippedPortWindow | undefined;
 
       const hoveredMachine = (): MechanicalPart | undefined => {
         const partId = mechanical.hoveredPartId() ?? mechanical.selectedPartId();
@@ -185,33 +123,77 @@ export const industrialPorts: Plugin = {
         return part;
       };
 
-      /** T：从背包安装一个基础接口盒到该核心第一个空闲输入安装位。 */
-      const installOn = (part: MechanicalPart): void => {
+      /** 安装一个接口盒：先确认背包有货 → 运行时校验 → 成功后才扣物品。 */
+      const installModule = (part: MechanicalPart, moduleId: PortModuleId, role: 'input' | 'output'): void => {
         const core = coreForPart(part.def.id);
         if (!core) return;
-        const slot = runtime.freeInputSlotOf(core, part.id);
+        const module = portModuleOfId(moduleId);
+        if (!module || module.itemId === null) return;
+        if (!module.fitsSlotRoles.includes(role)) return;
+        const slot = role === 'input'
+          ? runtime.freeInputSlotOf(core, part.id)
+          : runtime.freeOutputSlotOf(core, part.id);
         if (!slot) return;
-        if (!inventory.has(ITEM_IDS.INTERFACE_BOX, 1)) return;
-        const verdict = runtime.install(part.id, core, slot.id, 'port.through');
+        if (!inventory.has(module.itemId, 1)) return;
+        const verdict = runtime.install(part.id, core, slot.id, module.id);
         if (!verdict.ok) return;
-        inventory.remove(ITEM_IDS.INTERFACE_BOX, 1);
+        inventory.remove(module.itemId, 1);
+        if (armed && armed.partId === part.id) armed = undefined;
       };
 
-      /** Y：拆下该核心输入位的接口盒，返还盒子并把盒内物料交回库存（永不销毁）。 */
-      const removeFrom = (part: MechanicalPart): void => {
-        const port = runtime.inputBoxesOf(part.id)[0];
+      /** 拆卸接口盒：返还盒子 + 盒内物料，并解除该端口上的物料连接（任务书 P2-C-1 #9）。 */
+      const removeModule = (part: MechanicalPart): void => {
+        const port = runtime.inputBoxesOf(part.id)[0] ?? runtime.outputBoxesOf(part.id)[0];
         if (!port) return;
         const removal = runtime.remove(part.id, port.slot.id);
         if (!removal) return;
+        links.removeAt(part.id, port.slot.id);
         inventory.add(removal.moduleItemId, 1);
         if (removal.bufferItemId !== null && removal.bufferCount > 0) {
           inventory.add(removal.bufferItemId, removal.bufferCount);
         }
+        if (armed && armed.partId === part.id && armed.slotId === port.slot.id) armed = undefined;
       };
 
-      /** U：旋转加工核心 90°；放置事务由 mechanical 服务保证校验与回滚。 */
+      /** J：第一次选中上游输出接口；第二次连到下游输入接口；点回源头取消。 */
+      const linkAction = (part: MechanicalPart): void => {
+        const outputs = runtime.outputBoxesOf(part.id);
+        if (armed) {
+          if (armed.partId === part.id && outputs.some((port) => port.slot.id === armed?.slotId)) {
+            armed = undefined;
+            return;
+          }
+          for (const target of runtime.inputBoxesOf(part.id)) {
+            const result = links.create(
+              { entityId: armed.partId, slotId: armed.slotId },
+              { entityId: part.id, slotId: target.slot.id },
+              sceneOf(),
+            );
+            if (!result.ok) continue;
+            armed = undefined;
+            return;
+          }
+          return;
+        }
+        const source = outputs[0];
+        if (source) armed = { partId: part.id, slotId: source.slot.id };
+      };
+
+      /** H：解除悬停核心上所有端口上的物料连接（先解输入侧，再解输出侧）。 */
+      const unlink = (part: MechanicalPart): number => {
+        let removed = 0;
+        for (const port of runtime.inputBoxesOf(part.id)) removed += links.removeAt(part.id, port.slot.id);
+        for (const port of runtime.outputBoxesOf(part.id)) removed += links.removeAt(part.id, port.slot.id);
+        if (armed && armed.partId === part.id) armed = undefined;
+        return removed;
+      };
+
+      /** U：旋转加工核心 90°；位置事务由 mechanical 服务保证校验与回滚。 */
       const rotateCore = (part: MechanicalPart): void => {
-        mechanical.updatePlacement(part.id, withRotation(part.placement, normalizeRotation(part.placement.rotation + 90)));
+        mechanical.updatePlacement(
+          part.id,
+          withRotation(part.placement, normalizeRotation(part.placement.rotation + 90)),
+        );
       };
 
       world.addSystem(Update, {
@@ -220,28 +202,40 @@ export const industrialPorts: Plugin = {
         queries: [],
         fn: () => {
           const parts = mechanical.parts();
-          syncRemovedMachines(parts);
-          updateViews(parts);
+          const alive = new Set(parts.map((part) => part.id));
+          // 机器被拆掉：接口盒与盒内物料交回库存，连接一并清除（不丢物品）。
+          for (const removed of runtime.sync(alive)) {
+            for (const item of removed.items) inventory.add(item.itemId, item.count);
+          }
+          links.sync(alive);
+          if (armed && runtime.get(armed.partId, armed.slotId) === undefined) armed = undefined;
 
-          // 楼层建造模式：机械交互整体让出输入（与 mechanical 插件一致）。
+          const installed: InstalledPort[] = [];
+          for (const part of parts) for (const port of runtime.installedOf(part.id)) installed.push(port);
+          views.update({ parts, ports: installed, links: links.snapshot(sceneOf(parts)), armed });
+
+          // 楼层建造模式：机械/接口交互整体让出输入（与 mechanical 插件一致）。
           if (world.hasResource(FLOOR_MODE_KEY)) return;
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
+          if (input.keyboard.justPressedCode('Escape') && armed) {
+            armed = undefined;
+            return;
+          }
           const target = hoveredMachine();
           if (!target) return;
-          if (input.keyboard.justPressedCode('KeyT')) installOn(target);
-          else if (input.keyboard.justPressedCode('KeyY')) removeFrom(target);
+          if (input.keyboard.justPressedCode('KeyT')) installModule(target, 'port.through', 'input');
+          else if (input.keyboard.justPressedCode('KeyO')) installModule(target, 'port.output', 'output');
+          else if (input.keyboard.justPressedCode('KeyK')) installModule(target, 'port.splitter', 'output');
+          else if (input.keyboard.justPressedCode('KeyL')) installModule(target, 'port.merger', 'input');
+          else if (input.keyboard.justPressedCode('KeyY')) removeModule(target);
+          else if (input.keyboard.justPressedCode('KeyJ')) linkAction(target);
+          else if (input.keyboard.justPressedCode('KeyH')) unlink(target);
           else if (input.keyboard.justPressedCode('KeyU')) rotateCore(target);
         },
       }).unwrap();
 
       yield () => {
         world.removeSystem(Update, SYSTEM_NAME).unwrap();
-        for (const view of views.values()) {
-          world.despawn(view.body).unwrap();
-          world.despawn(view.accent).unwrap();
-        }
-        views.clear();
-        runtime.clear();
       };
     }, SYSTEM_NAME);
   },

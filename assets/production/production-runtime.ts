@@ -43,12 +43,22 @@ export interface PowerReading {
 }
 
 /**
- * P2-B 物料流网关：把「接口盒」接进加工运行时，同时不让加工运行时认识接口盒的内部结构。
+ * 输出接口的窄视图：加工运行时只需要知道「往哪个安装位投料」，不认识接口盒结构。
+ */
+export interface PortOutputTarget {
+  readonly slotId: string;
+}
+
+/**
+ * P2-B/P2-C 物料流网关：把「接口盒 / 物料连接」接进加工运行时，同时不让加工运行时
+ * 认识它们的内部结构。
  *
- * 语义（方案 P1）：
+ * 语义：
  * - 自动输入**必须**经过已安装的输入接口盒；没有盒子 → 溜槽堵塞（不吞料、不丢料）。
  * - 手动投料（玩家按 C / 右键）**不走**这个网关，直接进机器输入缓冲，与接口盒并存。
- * - 没有注入网关时（旧单测场景）自动输入一律不成立。
+ * - 自动输出**必须**经过已安装的输出接口盒（P2-C）：机器产物先进接口盒缓冲，
+ *   再由物料连接送到下游；没有输出接口时保持 M1.8 的「产物推到相邻溜槽」行为。
+ * - 没有注入网关时（旧单测场景）自动输入/输出/连接一律不成立。
  */
 export interface PortFlowGateway {
   /** 溜槽末端把 1 件物料交给该机器的输入接口盒；成功接收返回 true。 */
@@ -59,6 +69,12 @@ export interface PortFlowGateway {
   ): boolean;
   /** 把输入接口盒缓冲里的物料推进机器输入缓冲；返回实际转移件数。 */
   drain(partId: number, tryInsert: (itemId: ItemId) => boolean): number;
+  /** 该机器上已安装的输出接口（自动输出的合法目标，按安装位排序）。 */
+  outputBoxesOf(partId: number): readonly PortOutputTarget[];
+  /** 往输出接口投 1 件物料；容量满/物料类型不符返回 false。 */
+  acceptInto(partId: number, slotId: string, itemId: ItemId): boolean;
+  /** 推进所有物料连接；返回传递件数（P2-C）。 */
+  stepLinks(): number;
 }
 
 export interface ProductionRuntimeOptions {
@@ -215,8 +231,14 @@ export class ProductionRuntime {
   }
 
   /**
-   * 推进一帧：机器加工 → 机器把产物推进相邻溜槽 → 溜槽下滑并交接。
-   * 顺序保证同一帧内物品最多移动一格，不会「穿透」整条链。
+   * 推进一帧：输入接口盒 → 机器输入缓冲 → 机器输出缓冲 → 输出接口盒 → 物料连接 →
+   * 机器加工 → 机器产物推到相邻溜槽 → 溜槽下滑并交接。
+   *
+   * 顺序保证：
+   * - 先 drain（盒→机器）再加工，本帧到达的物料本帧就可能开工；
+   * - 先 pull（机器→输出盒）再推进连接，连接当帧就能把货送到下游输入盒；
+   * - 机器产物推给相邻溜槽仍排在最后：装了输出接口时产物优先走接口盒，
+   *   接口盒满了才溢出到溜槽（未装盒玩家保持 M1.8 行为）。
    */
   tick(delta: number): void {
     for (const [partId, state] of this.machines) {
@@ -225,6 +247,13 @@ export class ProductionRuntime {
       // P2-B：先把输入接口盒里的物料推进机器输入缓冲，再推进加工。
       // 顺序保证「本帧到达的物料本帧就可能开工」，且 drain 内部是原子转移。
       this.options.ports?.drain(partId, (itemId) => insertInput(state, part.def, itemId, 1) > 0);
+    }
+    // P2-C：机器输出缓冲 → 输出接口盒缓冲 → 物料连接（连接两端都是接口盒缓冲）。
+    this.pullToOutputPorts();
+    this.options.ports?.stepLinks();
+    for (const [partId, state] of this.machines) {
+      const part = this.partMap.get(partId);
+      if (!part) continue;
       const reading = this.powerOf(partId);
       this.tickMachineAndRecord(state, part.def, reading, delta);
     }
@@ -242,6 +271,28 @@ export class ProductionRuntime {
       advanceChute(state, delta);
       if (!readyForHandoff(state)) continue;
       this.handoff(part, state);
+    }
+  }
+
+  /**
+   * 机器输出缓冲 → 已装输出接口盒（P2-C）。
+   * 只有装了输出接口的机器才走这条路；没有接口盒时产物继续留在机器输出缓冲，
+   * 由随后的 `pushMachineOutputs()` 交给相邻溜槽（M1.8 行为不变）。
+   */
+  private pullToOutputPorts(): void {
+    const gateway = this.options.ports;
+    if (!gateway) return;
+    for (const [partId, state] of this.machines) {
+      if (state.outputCount <= 0 || state.outputItem === null) continue;
+      const targets = gateway.outputBoxesOf(partId);
+      if (targets.length === 0) continue;
+      for (const target of targets) {
+        while (state.outputCount > 0 && state.outputItem !== null) {
+          if (!gateway.acceptInto(partId, target.slotId, state.outputItem)) break;
+          takeOutput(state, 1);
+        }
+        if (state.outputCount <= 0) break;
+      }
     }
   }
 

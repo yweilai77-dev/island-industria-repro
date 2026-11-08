@@ -24,7 +24,10 @@ export type ItemId =
   | 'smelter'
   | 'forge'
   | 'chute'
-  | 'interface_box';
+  | 'interface_box'
+  | 'output_interface_box'
+  | 'splitter_box'
+  | 'merger_box';
 
 export interface ItemDefinition {
   readonly id: ItemId;
@@ -56,6 +59,9 @@ export const ITEM_IDS = {
   FORGE: 'forge',
   CHUTE: 'chute',
   INTERFACE_BOX: 'interface_box',
+  OUTPUT_INTERFACE_BOX: 'output_interface_box',
+  SPLITTER_BOX: 'splitter_box',
+  MERGER_BOX: 'merger_box',
 } as const satisfies Record<string, ItemId>;
 
 export const IRON_ORE_DEFINITION: ItemDefinition = {
@@ -189,8 +195,33 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
     // P2-B：工业接口盒。分类沿用 mechanical，原因见 MECHANICAL_DEFINITIONS 顶部注释。
     id: ITEM_IDS.INTERFACE_BOX,
     name: '基础接口盒',
-    description: '安装在加工核心的物料输入安装位上。装好后，溜槽可以把物料自动送进机器；不能手动投料。',
+    description: '通用物料接口（1 进 1 出），输入位、输出位都能装。装在输入位后溜槽可自动送料进机器；装在输出位后机器产物会自动进入接口盒。悬停核心按 T 装到输入位，按 O 装到输出位。',
     icon: 'interface_box',
+    maxStack: 999,
+    category: 'mechanical',
+  },
+  {
+    // P2-C：专用输出接口盒。输入/输出是明确区分的功能类型，普通输入接口不会自动获得输出能力。
+    id: ITEM_IDS.OUTPUT_INTERFACE_BOX,
+    name: '输出接口盒',
+    description: '专用物料输出接口（1 出），只能装在加工核心的输出安装位。装好后产物会进入接口盒，可经物料连接送到下游核心。悬停核心按 O 安装。',
+    icon: 'output_interface_box',
+    maxStack: 999,
+    category: 'mechanical',
+  },
+  {
+    id: ITEM_IDS.SPLITTER_BOX,
+    name: '分流接口盒',
+    description: '一路输入、两路输出的物料分流模块，只能装在加工核心的输出安装位。两路输出按轮询规则分配，最近送达的连接优先获得下一件。悬停核心按 K 安装。',
+    icon: 'splitter_box',
+    maxStack: 999,
+    category: 'mechanical',
+  },
+  {
+    id: ITEM_IDS.MERGER_BOX,
+    name: '合流接口盒',
+    description: '两路输入、一路输出的物料合流模块，只能装在加工核心的输入安装位。多路上游按轮询规则合入同一输入缓冲。悬停核心按 L 安装。',
+    icon: 'merger_box',
     maxStack: 999,
     category: 'mechanical',
   },

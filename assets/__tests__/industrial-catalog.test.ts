@@ -93,6 +93,7 @@ describe('工业目录：稳定 ID', () => {
     ]);
     expect(INDUSTRIAL_CATALOG.portModules.map((module) => module.id)).toEqual([
       'port.through',
+      'port.output',
       'port.splitter',
       'port.merger',
     ]);
@@ -127,8 +128,14 @@ describe('工业目录：索引可反查', () => {
     expect(INDUSTRIAL_CATALOG.recipes.map((recipe) => recipe.id)).toEqual([
       'crush-iron-ore',
       'forge-chute',
+      'forge-crusher',
       'forge-interface-box',
+      'forge-merger-box',
+      'forge-output-box',
+      'forge-processing-core',
       'forge-shaft',
+      'forge-smelter',
+      'forge-splitter-box',
       'forge-vertical-drive',
       'smelt-crushed-ore',
     ]);
@@ -152,11 +159,12 @@ describe('工业目录：索引可反查', () => {
     }
   });
 
-  it('接口盒可按 ID 反查，三种方向齐全', () => {
+  it('接口盒可按 ID 反查，四种功能齐全', () => {
     expect(portModuleOfId('port.through')?.kind).toBe('through');
+    expect(portModuleOfId('port.output')?.kind).toBe('through');
     expect(portModuleOfId('port.splitter')?.kind).toBe('splitter');
     expect(portModuleOfId('port.merger')?.kind).toBe('merger');
-    expect(PORT_MODULES).toHaveLength(3);
+    expect(PORT_MODULES).toHaveLength(4);
   });
 });
 

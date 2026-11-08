@@ -188,18 +188,22 @@ export function validateIndustrialCatalog(
   }
 
   // ---- 3. 接口盒 ----------------------------------------------------------
+  const moduleItems = new Map<string, string>();
   for (const module of catalog.portModules) {
     const path = `module:${module.id}`;
-    // P2-B：基础直通盒已是真实物品（可在锻压机上制造、拿在背包里、安装到机器上）；
-    // 分流/合流盒属于 P2-C 的拓扑能力，仍必须是「未接入物品」的纯定义。
-    if (module.kind === 'through') {
-      if (module.itemId === null) {
-        add('module.item-required', path, 'the through module must bind a real item since P2-B');
-      } else if (getItemDefinition(module.itemId) === undefined) {
+    // P2-C：四种接口盒都必须是真实物品（可制造、可持有、可安装、可拆卸）。
+    if (module.itemId === null) {
+      add('module.item-required', path, 'every port module must bind a real item since P2-C');
+    } else {
+      if (getItemDefinition(module.itemId) === undefined) {
         add('module.item-id', path, `unknown item id bound to port module: ${module.itemId}`);
       }
-    } else if (module.itemId !== null) {
-      add('module.item-null', path, 'splitter/merger modules must not bind a real item before P2-C');
+      const owner = moduleItems.get(module.itemId);
+      if (owner !== undefined) {
+        add('module.item-duplicate', path, `item ${module.itemId} is already bound to ${owner}`);
+      } else {
+        moduleItems.set(module.itemId, module.id);
+      }
     }
     if (module.inputs < 1 || module.outputs < 1) {
       add('module.flow', path, 'port module needs at least one input and one output');

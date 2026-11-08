@@ -76,6 +76,11 @@ export class PortRuntime {
     return this.installedOf(partId).filter((port) => port.slot.role === 'input');
   }
 
+  /** 该机器上已装的**输出位**接口盒（自动输出只认输出位）。 */
+  outputBoxesOf(partId: number): readonly InstalledPort[] {
+    return this.installedOf(partId).filter((port) => port.slot.role === 'output');
+  }
+
   get(partId: number, slotId: PortSlotId): InstalledPort | undefined {
     return this.byPart.get(partId)?.get(slotId);
   }
@@ -83,6 +88,49 @@ export class PortRuntime {
   /** 该核心上第一个还没装盒的输入安装位（P2-B 的安装目标）。 */
   freeInputSlotOf(core: ProcessingCoreDef, partId: number): PortSlotDef | undefined {
     return core.portSlots.find((slot) => slot.role === 'input' && this.get(partId, slot.id) === undefined);
+  }
+
+  /** 该核心上第一个还没装盒的输出安装位（P2-C 的输出侧安装目标）。 */
+  freeOutputSlotOf(core: ProcessingCoreDef, partId: number): PortSlotDef | undefined {
+    return core.portSlots.find((slot) => slot.role === 'output' && this.get(partId, slot.id) === undefined);
+  }
+
+  /** 某个安装位接口盒缓冲的只读视图；没装盒返回 undefined。 */
+  bufferOf(
+    partId: number,
+    slotId: PortSlotId,
+  ): { readonly itemId: ItemId | null; readonly count: number; readonly capacity: number } | undefined {
+    const port = this.get(partId, slotId);
+    if (!port) return undefined;
+    return { itemId: port.itemId, count: port.count, capacity: port.slot.capacity };
+  }
+
+  /**
+   * 从源接口盒向目标接口盒原子转移 1 件（P2-C 物料连接的唯一传递原语）。
+   *
+   * 原子性：所有检查（源有料、目标存在、目标类型兼容、目标有余量）都在**扣减之前**完成；
+   * 检查通过后先扣源再写目标，中间没有任何可失败步骤。因此不存在
+   * 「两端同时拥有」「转移中消失」或「复制同一批物料」。
+   */
+  moveOne(
+    fromPartId: number,
+    fromSlotId: PortSlotId,
+    toPartId: number,
+    toSlotId: PortSlotId,
+  ): boolean {
+    const source = this.get(fromPartId, fromSlotId);
+    if (!source || source.itemId === null || source.count <= 0) return false;
+    const target = this.get(toPartId, toSlotId);
+    if (!target) return false;
+    if (target.count > 0 && target.itemId !== source.itemId) return false;
+    if (target.count >= target.slot.capacity) return false;
+    const itemId = source.itemId;
+    // 先扣源：这一步之后写入目标不会失败（容量/类型已在上面确认）。
+    source.count -= 1;
+    if (source.count === 0) source.itemId = null;
+    if (target.count === 0) target.itemId = itemId;
+    target.count += 1;
+    return true;
   }
 
   /**
