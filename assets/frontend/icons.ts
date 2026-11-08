@@ -155,6 +155,19 @@ const CHUTE_SVG = [
   '</svg>',
 ].join('');
 
+// P2-B：基础接口盒。视觉语言沿用机械零件：深色描边、金属灰机身 + 琥珀色接口环。
+const INTERFACE_BOX_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="12" y="18" width="40" height="30" rx="4" fill="#5f6a74" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="18" y="24" width="28" height="18" rx="3" fill="#39434d" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="24" cy="33" r="4.5" fill="#d9a441" stroke="#5a3f15" stroke-width="2"/>',
+  '<circle cx="40" cy="33" r="4.5" fill="#d9a441" stroke="#5a3f15" stroke-width="2"/>',
+  '<rect x="28" y="31" width="8" height="4" fill="#8b95a0"/>',
+  '<rect x="20" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="38" y="48" width="6" height="8" rx="1" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '</svg>',
+].join('');
+
 const PLACEHOLDER_SVG = [
   '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
   '<rect x="12" y="12" width="40" height="40" rx="8" fill="#3a4a5c" stroke="#22303d" stroke-width="2"/>',
@@ -193,6 +206,8 @@ export function itemIconSvg(iconKey: string): string {
       return FORGE_SVG;
     case 'chute':
       return CHUTE_SVG;
+    case 'interface_box':
+      return INTERFACE_BOX_SVG;
     default:
       return PLACEHOLDER_SVG;
   }

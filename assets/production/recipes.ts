@@ -69,11 +69,29 @@ export const FORGE_CHUTE_RECIPE: Recipe = {
   seconds: 4,
 };
 
+/**
+ * P2-B：锻压基础接口盒。
+ * 只消耗铁锭，不涉及科技解锁或新关键材料——P2-B 只要求「有基础、可测试的制造配方」。
+ * 追加在锻压机配方列表**末尾**，保证 R 键切换顺序里前三条（含订单用的 forge-shaft）不变。
+ */
+export const FORGE_INTERFACE_BOX_RECIPE: Recipe = {
+  id: 'forge-interface-box',
+  label: '锻压基础接口盒',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 2 }],
+  outputs: [{ itemId: ITEM_IDS.INTERFACE_BOX, count: 1 }],
+  seconds: 5,
+};
+
 /** 每台机器的配方列表；`recipeIndex` 是玩家用 R 切换的下标。 */
 export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>>> = Object.freeze({
   crusher: Object.freeze([CRUSH_RECIPE]),
   smelter: Object.freeze([SMELT_RECIPE]),
-  forge: Object.freeze([FORGE_SHAFT_RECIPE, FORGE_VERTICAL_DRIVE_RECIPE, FORGE_CHUTE_RECIPE]),
+  forge: Object.freeze([
+    FORGE_SHAFT_RECIPE,
+    FORGE_VERTICAL_DRIVE_RECIPE,
+    FORGE_CHUTE_RECIPE,
+    FORGE_INTERFACE_BOX_RECIPE,
+  ]),
 });
 
 /** 机器的配方表；非加工机器返回空数组。 */

@@ -16,6 +16,7 @@ import {
 import {
   acceptItem,
   advanceChute,
+  chuteDirectionOf,
   chuteNextCell,
   createChuteState,
   flushChute,
@@ -41,9 +42,30 @@ export interface PowerReading {
   readonly rate: number;
 }
 
+/**
+ * P2-B 物料流网关：把「接口盒」接进加工运行时，同时不让加工运行时认识接口盒的内部结构。
+ *
+ * 语义（方案 P1）：
+ * - 自动输入**必须**经过已安装的输入接口盒；没有盒子 → 溜槽堵塞（不吞料、不丢料）。
+ * - 手动投料（玩家按 C / 右键）**不走**这个网关，直接进机器输入缓冲，与接口盒并存。
+ * - 没有注入网关时（旧单测场景）自动输入一律不成立。
+ */
+export interface PortFlowGateway {
+  /** 溜槽末端把 1 件物料交给该机器的输入接口盒；成功接收返回 true。 */
+  acceptFromChute(
+    part: MechanicalPart,
+    itemId: ItemId,
+    incoming: { readonly dx: number; readonly dz: number },
+  ): boolean;
+  /** 把输入接口盒缓冲里的物料推进机器输入缓冲；返回实际转移件数。 */
+  drain(partId: number, tryInsert: (itemId: ItemId) => boolean): number;
+}
+
 export interface ProductionRuntimeOptions {
   readonly partAt: (cell: Cell, level: number) => MechanicalPart | undefined;
   readonly addItem: (itemId: ItemId, count: number) => void;
+  /** P2-B 接口盒网关；缺省表示该场景不支持自动输入。 */
+  readonly ports?: PortFlowGateway;
 }
 
 export interface MachineSnapshot {
@@ -200,6 +222,9 @@ export class ProductionRuntime {
     for (const [partId, state] of this.machines) {
       const part = this.partMap.get(partId);
       if (!part) continue;
+      // P2-B：先把输入接口盒里的物料推进机器输入缓冲，再推进加工。
+      // 顺序保证「本帧到达的物料本帧就可能开工」，且 drain 内部是原子转移。
+      this.options.ports?.drain(partId, (itemId) => insertInput(state, part.def, itemId, 1) > 0);
       const reading = this.powerOf(partId);
       this.tickMachineAndRecord(state, part.def, reading, delta);
     }
@@ -277,13 +302,18 @@ export class ProductionRuntime {
       return;
     }
     if (target.def.kind === 'machine' && isProductionMachine(target.def)) {
-      const machine = this.machines.get(target.id);
-      if (!machine || state.item === null) {
+      if (state.item === null) {
         markBlocked(state);
         return;
       }
-      const inserted = insertInput(machine, target.def, state.item.itemId, 1);
-      if (inserted <= 0) {
+      // P2-B（方案 P1）：自动输入必须经过装在该机器输入安装位上的接口盒。
+      // 没装盒、盒子满了、或溜槽没有正对安装位的面 → 堵塞：物品留在溜槽上，不吞不丢。
+      const delivered = this.options.ports?.acceptFromChute(
+        target,
+        state.item.itemId,
+        chuteDirectionOf(part.placement.rotation),
+      ) ?? false;
+      if (!delivered) {
         markBlocked(state);
         return;
       }

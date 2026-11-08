@@ -23,7 +23,8 @@ export type ItemId =
   | 'crusher'
   | 'smelter'
   | 'forge'
-  | 'chute';
+  | 'chute'
+  | 'interface_box';
 
 export interface ItemDefinition {
   readonly id: ItemId;
@@ -54,6 +55,7 @@ export const ITEM_IDS = {
   SMELTER: 'smelter',
   FORGE: 'forge',
   CHUTE: 'chute',
+  INTERFACE_BOX: 'interface_box',
 } as const satisfies Record<string, ItemId>;
 
 export const IRON_ORE_DEFINITION: ItemDefinition = {
@@ -85,6 +87,15 @@ const PRODUCTION_DEFINITIONS: readonly ItemDefinition[] = [
   },
 ];
 
+/**
+ * 机械类物品定义。
+ *
+ * P2-B：接口盒也登记在这里并沿用 `category: 'mechanical'`。这不是把它当成可放置的机械零件
+ * （`partDefForItem` 里没有它，快捷栏也不会绑定它），而是因为 `category` 目前实际承担的是
+ * 「选中该物品时是否让建筑系统让出输入」这一个职责（见 build/input-mode.ts）：
+ * 接口盒是安装在机器上的工业部件，不应该被当作建筑放置。
+ * 等 P2-E 科技树需要真正的物品分类时再拆出独立分类。
+ */
 const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
   {
     id: ITEM_IDS.SHAFT,
@@ -171,6 +182,15 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
     name: '重力溜槽',
     description: '无动力物料溜槽：把机器产物沿朝向送到下一格。堵塞时物品停在槽上，不会消失。',
     icon: 'chute',
+    maxStack: 999,
+    category: 'mechanical',
+  },
+  {
+    // P2-B：工业接口盒。分类沿用 mechanical，原因见 MECHANICAL_DEFINITIONS 顶部注释。
+    id: ITEM_IDS.INTERFACE_BOX,
+    name: '基础接口盒',
+    description: '安装在加工核心的物料输入安装位上。装好后，溜槽可以把物料自动送进机器；不能手动投料。',
+    icon: 'interface_box',
     maxStack: 999,
     category: 'mechanical',
   },

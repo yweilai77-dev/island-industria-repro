@@ -127,6 +127,7 @@ describe('工业目录：索引可反查', () => {
     expect(INDUSTRIAL_CATALOG.recipes.map((recipe) => recipe.id)).toEqual([
       'crush-iron-ore',
       'forge-chute',
+      'forge-interface-box',
       'forge-shaft',
       'forge-vertical-drive',
       'smelt-crushed-ore',

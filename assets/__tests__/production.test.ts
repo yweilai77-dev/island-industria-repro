@@ -13,6 +13,7 @@ import {
 } from '../production/production.ts';
 import {
   FORGE_CHUTE_RECIPE,
+  FORGE_INTERFACE_BOX_RECIPE,
   FORGE_SHAFT_RECIPE,
   FORGE_VERTICAL_DRIVE_RECIPE,
   MACHINE_RECIPES,
@@ -160,7 +161,8 @@ describe('M1.8-C machine state machine', () => {
   });
 
   it('cycles the forge recipe only when the cycle has not consumed input', () => {
-    expect(MACHINE_RECIPES.forge).toHaveLength(3);
+    // P2-B：锻压机新增「锻压基础接口盒」配方，列表 3 → 4；前三条顺序保持不变。
+    expect(MACHINE_RECIPES.forge).toHaveLength(4);
     const state = createMachineState(1);
     expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_SHAFT_RECIPE.id);
     expect(canSwitchRecipe(state)).toBe(true);
@@ -171,6 +173,9 @@ describe('M1.8-C machine state machine', () => {
 
     expect(cycleRecipe(state, FORGE)).toBe(true);
     expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_CHUTE_RECIPE.id);
+
+    expect(cycleRecipe(state, FORGE)).toBe(true);
+    expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_INTERFACE_BOX_RECIPE.id);
 
     expect(cycleRecipe(state, FORGE)).toBe(true);
     expect(state.recipeIndex).toBe(0);

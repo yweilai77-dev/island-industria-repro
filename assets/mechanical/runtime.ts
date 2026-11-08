@@ -7,9 +7,8 @@ import { PROPAGATE_TRANSFORMS_SYSTEM, Transform } from '@forgeax/engine/scene';
 import type { GameProjectionValue } from '@forgeax/engine/app';
 import type {} from '@forgeax/engine/assets-runtime';
 import type {} from '../hotbar/hotbar.ts';
-import type { InventoryService } from '../inventory/inventory.ts';
 import type {} from '../player/player.ts';
-import { ITEM_IDS, isMechanicalItem, type ItemId } from '../items/items.ts';
+import { isMechanicalItem, type ItemId } from '../items/items.ts';
 import { placementCenter } from '../grid/grid.ts';
 import { levelBaseY } from '../spatial/space.ts';
 import { FLOOR_MODE_KEY, type FloorModeState } from '../build/floors.ts';
@@ -19,163 +18,29 @@ import type { MechanicalService } from './mechanical.pack.ts';
 import { applyMachinePose, applySpin } from './animation.ts';
 import { createMechanicalReadout } from './readout.ts';
 import { readoutTargetOf, type ReadoutTarget } from './readout-status.ts';
-import { MechanicalRuntimeState, sourceToggleTarget, type MechanicalSnapshot } from './runtime-state.ts';
-import { ProductionRuntime, type ProductionSnapshot } from '../production/production-runtime.ts';
-import type { MachineBlockReason } from '../production/production.ts';
+import { MechanicalRuntimeState, sourceToggleTarget } from './runtime-state.ts';
+import { ProductionRuntime } from '../production/production-runtime.ts';
 import { chuteItemWorldPosition } from '../production/transport.ts';
 import { resolveSceneEntity } from '../shared/scene-refs.ts';
-import {
-  createGoalState,
-  evaluateGoal,
-  type GoalMachineObservation,
-  type GoalNetworkObservation,
-  type GoalObservation,
-  type GoalPartObservation,
-  type GoalSnapshot,
-  type GoalSourceObservation,
-  type GoalState,
-} from '../goal/goal.ts';
+import { createGoalProgress } from '../goal/goal-service.ts';
+import { createPortFlowGateway } from '../industrial/port-flow.ts';
+import type {} from '../industrial/ports.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 /** 玩家离动力源多近才能摇动摇柄（米，水平距离）。 */
 const WIND_VERTICAL_TOLERANCE = 2.5;
 
 /**
- * M2.0-P1-B：第一份工业订单的只读进度服务。只读映射现有快照，不修改运行时、不暴露运行时实例。
+ * M2.0-P1-B 目标进度服务在 P2-B 拆到 `../goal/goal-service.ts`（原样迁移、行为不变）。
+ * 这里保留 re-export，历史 playthrough 与既有测试的 import 路径不受影响。
  */
-declare module '@forgeax/engine/plugin' {
-  interface EngineContextServices {
-    /** 目标系统只读进度（每帧由 mechanical-runtime 刷新）。 */
-    goalProgress: GoalProgressService;
-  }
-}
-
-/** 目标系统一帧数据的真实来源。 */
-export interface GoalFrameSource {
-  readonly parts: readonly MechanicalPart[];
-  readonly mechanical: MechanicalSnapshot;
-  readonly production: ProductionSnapshot;
-  readonly inventory: InventoryService;
-}
-
-/** 外部可读取的只读进度服务。 */
-export interface GoalProgressService {
-  /** 最近一帧的目标进度快照（纯 JSON）。 */
-  snapshot(): GoalSnapshot;
-  /** 最近一帧的订单观测（只读纯数据，用于调试/验收）。 */
-  observation(): GoalObservation;
-  /** 订单状态（基线 + 已锁存步骤）的只读副本。 */
-  state(): GoalState;
-}
-
-/** 机械运行时内部使用。 */
-export interface GoalProgressReader extends GoalProgressService {
-  /** 推进一帧并返回本帧目标快照。 */
-  update(source: GoalFrameSource): GoalSnapshot;
-}
-
-const EMPTY_GOAL_OBSERVATION: GoalObservation = Object.freeze({
-  ironOre: 0,
-  parts: Object.freeze([]),
-  machines: Object.freeze([]),
-  sources: Object.freeze([]),
-  networks: Object.freeze([]),
-  produced: Object.freeze([]),
-});
-
-/** 宽类型 block 收敛为合法阻塞原因。 */
-function asMachineBlockReason(value: string): MachineBlockReason {
-  switch (value) {
-    case 'ok':
-    case 'no-power':
-    case 'no-input':
-    case 'output-full':
-    case 'no-recipe':
-      return value;
-    default:
-      return 'no-recipe';
-  }
-}
-
-/** 把现有只读快照映射成目标观测（纯函数，不修改输入）。 */
-export function assembleGoalObservation(source: GoalFrameSource): GoalObservation {
-  const mechanicalParts = new Map(source.mechanical.parts.map((part) => [part.partId, part]));
-  const parts: GoalPartObservation[] = source.parts.map((part) => {
-    const partState = mechanicalParts.get(part.id);
-    return {
-      partId: part.id,
-      partKind: part.def.id,
-      powered: partState?.powered === true,
-      stalled: partState?.stalled === true,
-    };
-  });
-  const machines: GoalMachineObservation[] = source.production.machines.map((machine) => ({
-    partId: machine.partId,
-    recipeId: machine.recipeId,
-    progress: machine.progress,
-    block: asMachineBlockReason(machine.block),
-    inputItem: machine.inputItem,
-    inputCount: machine.inputCount,
-    outputItem: machine.outputItem,
-    outputCount: machine.outputCount,
-    running: machine.running,
-  }));
-  const sources: GoalSourceObservation[] = source.mechanical.sources.map((powerSource) => ({
-    partId: powerSource.partId,
-    engaged: powerSource.engaged,
-    energy: powerSource.energy,
-    energyCapacity: powerSource.energyCapacity,
-  }));
-  const networks: GoalNetworkObservation[] = source.mechanical.networks.map((network) => ({
-    id: network.id,
-    status: network.status,
-    reason: network.reason,
-    sourceIds: [...network.sourceIds],
-    machineIds: [...network.machineIds],
-    partIds: [...network.partIds],
-    stalledPartIds: [...network.stalledPartIds],
-    speedFactor: network.speedFactor,
-  }));
-  const produced = source.production.produced.map((entry) => ({ itemId: entry.itemId, count: entry.count }));
-  return {
-    ironOre: source.inventory.count(ITEM_IDS.IRON_ORE),
-    parts,
-    machines,
-    sources,
-    networks,
-    produced,
-  };
-}
-
-/**
- * 创建订单进度求值器：第一帧真实观测时记录 production.produced 基线，之后只按增量判定。
- * 当前版本没有存档/菜单，机械运行时初始化即世界载入，因此订单起点就是首帧。
- */
-export function createGoalProgress(): GoalProgressReader {
-  const preview = evaluateGoal(createGoalState(EMPTY_GOAL_OBSERVATION), EMPTY_GOAL_OBSERVATION);
-  let goalState: GoalState = preview.state;
-  let orderStarted = false;
-  let lastObservation: GoalObservation = EMPTY_GOAL_OBSERVATION;
-  let lastSnapshot: GoalSnapshot = preview.snapshot;
-  return {
-    update(source) {
-      const observation = assembleGoalObservation(source);
-      // 只在第一帧记录基线：之后的读取永不重置订单进度。
-      if (!orderStarted) {
-        goalState = createGoalState(observation);
-        orderStarted = true;
-      }
-      const evaluation = evaluateGoal(goalState, observation);
-      goalState = evaluation.state;
-      lastObservation = observation;
-      lastSnapshot = evaluation.snapshot;
-      return lastSnapshot;
-    },
-    snapshot: () => lastSnapshot,
-    observation: () => lastObservation,
-    state: () => ({ baseline: { ...goalState.baseline }, completed: [...goalState.completed] }),
-  };
-}
+export {
+  assembleGoalObservation,
+  createGoalProgress,
+  type GoalFrameSource,
+  type GoalProgressReader,
+  type GoalProgressService,
+} from '../goal/goal-service.ts';
 
 /**
  * M1.7-C runtime（M1.8 扩展为整条生产链的 tick 中枢）：
@@ -189,12 +54,13 @@ export function createGoalProgress(): GoalProgressReader {
  */
 export const mechanicalRuntime: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory'],
+  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory', 'ports'],
   apply(ctx) {
     const world = ctx.world;
     const mechanical = ctx.mechanical;
     const hotbar = ctx.hotbar;
     const inventory = ctx.inventory;
+    const ports = ctx.ports;
     const player = ctx.player;
     const assets = ctx.assets;
     if (!assets) throw new Error('mechanical runtime requires asset service');
@@ -203,9 +69,14 @@ export const mechanicalRuntime: Plugin = {
     ctx.effect(function* () {
       const state = new MechanicalRuntimeState();
       const readout = createMechanicalReadout(world, assets, camera);
+      // P2-B：自动输入的合法入口是「装在该机器输入安装位上的接口盒」。
+      // 方向必须对得上：溜槽的输送方向必须正好从安装位所在的面外侧推进来，
+      // 不是「两个物体相邻就自动连上」。实现与集成测试共用 port-flow.ts。
+      const portFlow = createPortFlowGateway(ports);
       const production = new ProductionRuntime({
         partAt: (cell, level) => mechanical.partAt(cell, level),
         addItem: (itemId, count) => { inventory.add(itemId, count); },
+        ports: portFlow,
       });
       // M2.0-P1-B：只读目标进度服务（每帧用真实快照刷新；不对外暴露 update）。
       const goalProgress = createGoalProgress();
@@ -250,6 +121,8 @@ export const mechanicalRuntime: Plugin = {
         return {
           ...base,
           production: production.snapshot(),
+          // P2-B：接口盒安装状态与盒内缓冲（唯一 read 的一部分，不新增第二个 read）。
+          ports: ports.snapshot(),
           inventory: inventorySnapshot,
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],

@@ -190,9 +190,16 @@ export function validateIndustrialCatalog(
   // ---- 3. 接口盒 ----------------------------------------------------------
   for (const module of catalog.portModules) {
     const path = `module:${module.id}`;
-    // P2-A 明确不接真实物品：接口盒物品化是 P2-B。
-    if (module.itemId !== null) {
-      add('module.item-null', path, 'port modules must not bind a real item in P2-A');
+    // P2-B：基础直通盒已是真实物品（可在锻压机上制造、拿在背包里、安装到机器上）；
+    // 分流/合流盒属于 P2-C 的拓扑能力，仍必须是「未接入物品」的纯定义。
+    if (module.kind === 'through') {
+      if (module.itemId === null) {
+        add('module.item-required', path, 'the through module must bind a real item since P2-B');
+      } else if (getItemDefinition(module.itemId) === undefined) {
+        add('module.item-id', path, `unknown item id bound to port module: ${module.itemId}`);
+      }
+    } else if (module.itemId !== null) {
+      add('module.item-null', path, 'splitter/merger modules must not bind a real item before P2-C');
     }
     if (module.inputs < 1 || module.outputs < 1) {
       add('module.flow', path, 'port module needs at least one input and one output');

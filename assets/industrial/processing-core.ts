@@ -110,28 +110,32 @@ interface PortSlotSpec {
  * - 输出位必须在 `px` 面：运行时 `pushMachineOutputs()` 固定把产物推到本地 +X；
  * - 安装位不得与机械动力端口同面：三台机器的动力输入都在 `nx`，接口盒不能盖住传动轴。
  *
- * 因此物料输入位当前选在 `pz`（本地 +Z）。**这是 P2-B 可调整的数据，不是玩法规则**；
- * P2-B 若要改变安装面或增加安装位，只改这张表即可，数据模型不变。
+ * 物料输入位选在 `nz`（本地 -Z）。**P2-B 调整过（P2-A 曾为 `pz`）**，理由：
+ * 已验收的 M1.8 产线把溜槽放在机器 -Z 侧、向 +Z 推料（`m18c-production` 的
+ * 破碎机(-3,8) → 溜槽(-2,8) → 熔炼炉(-2,9)），物料正是从 -Z 面进入机器；
+ * 输入位放在 `nz` 才能让既有的溜槽布局直接接上接口盒，不必改玩家已建的产线。
+ *
+ * 这仍然是 **P2-B 可调整的数据**，不是玩法规则：改这张表即可，数据模型不变。
  */
 const PORT_SLOT_LAYOUT_BY_PART = new Map<string, readonly PortSlotSpec[]>([
   [
     'crusher',
     [
-      { role: 'input', face: 'pz' },
+      { role: 'input', face: 'nz' },
       { role: 'output', face: 'px' },
     ],
   ],
   [
     'smelter',
     [
-      { role: 'input', face: 'pz' },
+      { role: 'input', face: 'nz' },
       { role: 'output', face: 'px' },
     ],
   ],
   [
     'forge',
     [
-      { role: 'input', face: 'pz' },
+      { role: 'input', face: 'nz' },
       { role: 'output', face: 'px' },
     ],
   ],

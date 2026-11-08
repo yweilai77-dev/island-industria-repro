@@ -65,7 +65,9 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.harvest, 'plugin/harvest')) },
           // 机械系统最后挂载：需要 inventory/hotbar/spatial/player 已就绪。
           { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical')) },
-          // 动力运行时依赖 mechanical 服务，必须在其后挂载。
+          // P2-B 接口盒：注入 mechanical/inventory，必须晚于机械系统。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.industrial, 'plugin/ports')) },
+          // 动力运行时依赖 mechanical 与 ports 服务，必须在其后挂载。
           { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical-runtime')) },
         ],
       },

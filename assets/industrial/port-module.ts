@@ -1,4 +1,4 @@
-import type { ItemId } from '../items/items.ts';
+import { ITEM_IDS, type ItemId } from '../items/items.ts';
 import {
   makePortModuleId,
   type PortModuleId,
@@ -44,6 +44,8 @@ interface PortModuleSpec {
   readonly inputs: number;
   readonly outputs: number;
   readonly fitsSlotRoles: readonly PortSlotRole[];
+  /** 绑定的真实物品；null = 本阶段还不是物品（P2-C 的分流/合流盒）。 */
+  readonly itemId: ItemId | null;
 }
 
 function definePortModule(spec: PortModuleSpec): PortModuleDef {
@@ -54,7 +56,7 @@ function definePortModule(spec: PortModuleSpec): PortModuleDef {
     inputs: spec.inputs,
     outputs: spec.outputs,
     fitsSlotRoles: Object.freeze([...spec.fitsSlotRoles]),
-    itemId: null,
+    itemId: spec.itemId,
   });
 }
 
@@ -65,6 +67,9 @@ function definePortModule(spec: PortModuleSpec): PortModuleDef {
  * - `port.through`  基础直通盒：1 输入 1 输出，输入位与输出位都能装；
  * - `port.splitter` 分流盒：1 输入 2 输出，装在机器**输出位**，把产物分到两条下游；
  * - `port.merger`   合流盒：2 输入 1 输出，装在机器**输入位**，把两路来料合入机器。
+ *
+ * P2-B 只把 `port.through` 接入真实物品（`interface_box`）；分流/合流盒属于 P2-C 的拓扑能力，
+ * 仍是纯定义、`itemId` 为 null，玩家拿不到也装不上。
  */
 export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
   definePortModule({
@@ -74,6 +79,7 @@ export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
     inputs: 1,
     outputs: 1,
     fitsSlotRoles: ['input', 'output'],
+    itemId: ITEM_IDS.INTERFACE_BOX,
   }),
   definePortModule({
     name: 'splitter',
@@ -82,6 +88,7 @@ export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
     inputs: 1,
     outputs: 2,
     fitsSlotRoles: ['output'],
+    itemId: null,
   }),
   definePortModule({
     name: 'merger',
@@ -90,6 +97,7 @@ export const PORT_MODULES: readonly PortModuleDef[] = Object.freeze([
     inputs: 2,
     outputs: 1,
     fitsSlotRoles: ['input'],
+    itemId: null,
   }),
 ]);
 

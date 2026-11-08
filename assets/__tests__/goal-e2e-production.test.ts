@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { MACHINE_RECIPES } from '../production/recipes.ts';
 import {
   CRUSHER_ID,
   FORGE_ID,
@@ -111,9 +112,13 @@ describe('M2.0-P1-D 场景 7：配方错误', () => {
     expect(snapshot.complete).toBe(false);
     expectGoalViewMatches(snapshot);
 
-    // 再切两次回到正确配方（立式传动带 → 溜槽 → 传动轴）。
-    expect(rig.production.cycleMachineRecipe(FORGE_ID)).toBe(true);
-    expect(rig.production.cycleMachineRecipe(FORGE_ID)).toBe(true);
+    // 切回正确配方：按真实配方列表长度循环，配方数量变化时本用例仍然成立
+    // （P2-B 锻压机新增第 4 条配方，这里不再硬编码「两次」）。
+    for (let guard = 0; guard < MACHINE_RECIPES.forge!.length; guard += 1) {
+      const current = rig.production.snapshot().machines.find((machine) => machine.partId === FORGE_ID)?.recipeId;
+      if (current === 'forge-shaft') break;
+      expect(rig.production.cycleMachineRecipe(FORGE_ID)).toBe(true);
+    }
     expect(rig.production.snapshot().machines.find((machine) => machine.partId === FORGE_ID)?.recipeId).toBe('forge-shaft');
     snapshot = tick(rig, progress);
     expect(snapshot.blocker?.code).toBe('no-input');

@@ -73,11 +73,12 @@ describe('工业数据 ↔ 现有配方', () => {
       const expected = recipesFor(core.corePartId).map((recipe) => recipe.id);
       expect(core.recipeIds).toEqual(expected);
     }
-    // 锻压机有 3 条配方，切换顺序是历史验收行为，不能变。
+    // 锻压机有 4 条配方（P2-B 追加了基础接口盒），切换顺序是历史验收行为，不能变。
     expect(coreForPart('forge')?.recipeIds).toEqual([
       'forge-shaft',
       'forge-vertical-drive',
       'forge-chute',
+      'forge-interface-box',
     ]);
   });
 
@@ -154,12 +155,20 @@ describe('工业数据 ↔ 现有物料方向', () => {
   });
 });
 
-describe('P2-A 未改动现有物品与接口盒物品化状态', () => {
-  it('物品总数仍是 14（本阶段没有新增任何物品）', () => {
-    expect(itemDefinitions()).toHaveLength(14);
+describe('接口盒物品接入（P2-B）', () => {
+  it('物品总数 15：新增的只有基础接口盒', () => {
+    expect(itemDefinitions()).toHaveLength(15);
   });
 
-  it('接口盒尚未绑定真实物品（P2-B 才接）', () => {
-    for (const module of INDUSTRIAL_CATALOG.portModules) expect(module.itemId).toBeNull();
+  it('基础直通盒绑定真实物品，分流/合流盒仍未绑定（P2-C）', () => {
+    expect(recipeOfId('forge-interface-box')?.recipe.outputs).toEqual([
+      { itemId: 'interface_box', count: 1 },
+    ]);
+    expect(INDUSTRIAL_CATALOG.portModules.find((module) => module.id === 'port.through')?.itemId)
+      .toBe('interface_box');
+    for (const module of INDUSTRIAL_CATALOG.portModules) {
+      if (module.id === 'port.through') continue;
+      expect(module.itemId).toBeNull();
+    }
   });
 });

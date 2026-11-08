@@ -80,38 +80,38 @@ describe('MachineEntity 投影', () => {
 
 describe('接口实例与物料连接校验', () => {
   it('接口实例键是 <entityId>:<slotId>', () => {
-    expect(portInstanceOf(7, { slotId: 'slot.crusher.in.pz', moduleId: 'port.through' }))
-      .toBe('7:slot.crusher.in.pz');
+    expect(portInstanceOf(7, { slotId: 'slot.crusher.in.nz', moduleId: 'port.through' }))
+      .toBe('7:slot.crusher.in.nz');
   });
 
   it('直通盒可装在输入位与输出位；分流盒只能输出位；合流盒只能输入位', () => {
-    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.pz', moduleId: 'port.through' })).toBeNull();
+    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.nz', moduleId: 'port.through' })).toBeNull();
     expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.out.px', moduleId: 'port.through' })).toBeNull();
     expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.out.px', moduleId: 'port.splitter' })).toBeNull();
-    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.pz', moduleId: 'port.splitter' })).not.toBeNull();
-    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.pz', moduleId: 'port.merger' })).toBeNull();
+    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.nz', moduleId: 'port.splitter' })).not.toBeNull();
+    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.nz', moduleId: 'port.merger' })).toBeNull();
     expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.out.px', moduleId: 'port.merger' })).not.toBeNull();
   });
 
   it('未知安装位与未知接口盒被拒绝', () => {
-    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.smelter.in.pz', moduleId: 'port.through' })).not.toBeNull();
-    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.pz', moduleId: 'port.ghost' as PortModuleId })).not.toBeNull();
+    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.smelter.in.nz', moduleId: 'port.through' })).not.toBeNull();
+    expect(validatePortInstance(CRUSHER!, { slotId: 'slot.crusher.in.nz', moduleId: 'port.ghost' as PortModuleId })).not.toBeNull();
   });
 
   it('物料连接：output → input 合法，反向 / 自连 / 未知位被拒绝', () => {
     const crusherOut: PortEndpoint = { entityId: 1, slotId: 'slot.crusher.out.px' };
-    const smelterIn: PortEndpoint = { entityId: 2, slotId: 'slot.smelter.in.pz' };
+    const smelterIn: PortEndpoint = { entityId: 2, slotId: 'slot.smelter.in.nz' };
     const link = materialLinkBetween(crusherOut, smelterIn);
-    expect(link.id).toBe('link:1:slot.crusher.out.px->2:slot.smelter.in.pz');
+    expect(link.id).toBe('link:1:slot.crusher.out.px->2:slot.smelter.in.nz');
     expect(validateMaterialLink(link, CRUSHER!, SMELTER!)).toBeNull();
 
     const reversed = materialLinkBetween(smelterIn, crusherOut);
     expect(validateMaterialLink(reversed, SMELTER!, CRUSHER!)).not.toBeNull();
 
-    const selfLink = materialLinkBetween(crusherOut, { entityId: 1, slotId: 'slot.crusher.in.pz' });
+    const selfLink = materialLinkBetween(crusherOut, { entityId: 1, slotId: 'slot.crusher.in.nz' });
     expect(validateMaterialLink(selfLink, CRUSHER!, CRUSHER!)).not.toBeNull();
 
-    const unknownSlot = materialLinkBetween(crusherOut, { entityId: 2, slotId: 'slot.crusher.in.pz' });
+    const unknownSlot = materialLinkBetween(crusherOut, { entityId: 2, slotId: 'slot.crusher.in.nz' });
     expect(validateMaterialLink(unknownSlot, CRUSHER!, SMELTER!)).not.toBeNull();
   });
 });
