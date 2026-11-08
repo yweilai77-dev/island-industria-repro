@@ -263,7 +263,7 @@ export async function runSceneF(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo,
     placeLayout, onPart, enableAllSources, feedByC, feedMachine, cycleRecipeAt, collectMachine,
-    waitFor, removeAllParts, calibrate,
+    waitFor, removeAllParts, calibrate, shot,
   } = C;
 
   await play.step('30-scene-f-line-build', async () => {

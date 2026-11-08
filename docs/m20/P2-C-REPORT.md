@@ -95,7 +95,9 @@
 ### 4.4 新增 — 测试与验收脚本
 
 - `assets/__tests__/link-runtime.test.ts`（13 例）
-- `assets/__tests__/link-flow.test.ts`（16 例）
+- `assets/__tests__/link-flow.test.ts`（12 例：直接传输 / 断链重连 / 旋转 / 多级产线）
+- `assets/__tests__/link-distribution.test.ts`（5 例：分流/合流分配与阻塞）
+- `assets/__tests__/link-test-rig.ts`（两个集成测试共用的真实运行时装置，非测试文件）
 - `scripts/p2c-links.mjs` / `p2c-links-lib.mjs` / `p2c-links-scene-a.mjs` / `p2c-links-scene-bcf.mjs`
 
 ### 4.5 修改 — 既有测试（契约同步，未弱化）
@@ -165,12 +167,15 @@
 
 | 检查 | 命令 | 基线 | P2-C 完成时 |
 |:--|:--|:--|:--|
-| 单元/集成测试 | `pnpm test` | 51 文件 / 495 用例 | **53 文件 / 526 用例全部通过** |
+| 单元/集成测试 | `pnpm test` | 51 文件 / 495 用例 | **54 文件 / 527 用例全部通过** |
 | 类型检查 | `pnpm typecheck` | 通过 | **通过** |
 | 工程检查 | `forgeax project check --json` | `ok: true` | **`ok: true`** |
-| 生产构建 | `forgeax project build` | 213 artifacts / 22,396,610 B | **213 artifacts / 22,904,979 B** |
+| 生产构建 | `forgeax project build` | 213 artifacts / 22,396,610 B | **213 artifacts / 22,908,412 B** |
 
-净增 **2 个测试文件 / 31 个用例**；既有 495 个用例全部保持通过（含 4 个文件的契约同步与加强）。
+净增 **3 个测试文件 / 30 个用例**（`link-runtime` 13 + `link-flow` 12 + `link-distribution` 5，
+`link-test-rig.ts` 为共享装置不单独计用例），另在
+`industrial-compat` 内补 2 条制造断言用例；既有 495 个用例全部保持通过
+（含 4 个文件的契约同步与加强）。
 
 新增覆盖（对照任务书 §7.1）：
 
@@ -204,7 +209,7 @@
 | **制造演示（F 内）** | ✅ | 锻压机 R 切到 `forge-output-box`，用 2 个真实熔炼铁锭锻出 1 个输出接口盒，右键取货后背包 `output_interface_box` +1 |
 | **拆除资源回收** | ✅ | 每场景结束删除全部机器：接口盒、盒内物料、机器缓冲全部退回背包；连接清零 |
 
-- 运行结果：`passed: true`，**console error 0 / page error 0**，`rendered: true`。
+- 运行结果：`passed: true`，**500 步 / 314.8 s / console error 0 / page error 0**，`rendered: true`。
 - 截图：`artifacts/play/scripts/p2c-links/`（22 张，含场景 A/B/C/F 与 1280×600 布局检查）。
 - 视觉核对：接口盒有明确体积与朝向（沿安装位法线外凸）、按功能分色；连接为细铜管，
   失效连接变暗红；截图前清掉选中高亮与放置幽灵，画面只保留真实机器/接口/连接。
@@ -215,10 +220,10 @@
 
 | 检查 | 结果 | 步数 | 耗时 | console / page |
 |:--|:--|--:|--:|:--|
-| M1.8 生产链（`m18c-production.mjs`，已含接口盒步骤） | ✅ 通过 | 136 | 113.8 s | 0 / 0 |
-| M2.0-P1 第一张工业订单（`m20-first-order.mjs`） | ✅ 通过（0/8 → 8/8） | 173 | 102.2 s | 0 / 0 |
-| P2-B 接口盒验收（`p2b-ports.mjs`） | ✅ 通过（场景 A–F） | 249 | 232.7 s | 0 / 0 |
-| M1.7 / M1.8 既有单测 | ✅ 526 用例全通过 | — | — | — |
+| M1.8 生产链（`m18c-production.mjs`，已含接口盒步骤） | ✅ 通过 | 136 | 116.9 s | 0 / 0 |
+| M2.0-P1 第一张工业订单（`m20-first-order.mjs`） | ✅ 通过（0/8 → 8/8） | 172 | 101.9 s | 0 / 0 |
+| P2-B 接口盒验收（`p2b-ports.mjs`） | ✅ 通过（场景 A–F） | 249 | 230.0 s | 0 / 0 |
+| M1.7 / M1.8 既有单测 | ✅ 527 用例全通过 | — | — | — |
 
 - 三处既有行为变更均已说明：①原型套件数量（DESIGN §1.3）；②锻压配方 4 → 10（新增 6 条，前 4 条顺序不变）；
   ③物品数 15 → 18。没有删除或弱化任何既有测试断言。
@@ -260,7 +265,7 @@
 - 核心间物料传输：输出缓冲→输出盒→连接→输入盒→输入缓冲，容量/背压/原子性/守恒；
 - 分流（1→2 轮询）与合流（2→1 轮询），真实游戏场景 B/C 通过；
 - 断链/重连、拆盒、旋转、拆核心的物料安全与恢复；三核多级产线；真实制造输出盒；
-- 自动化 53 文件 / 526 用例、typecheck、project check、build 全绿；
+- 自动化 54 文件 / 527 用例、typecheck、project check、build 全绿；
 - 真实游戏场景 A–F 通过（console 0 / page 0），M1.8 / M2.0-P1 / P2-B 回归通过。
 
 ### 14.2 已实现但未完成真实游戏验证

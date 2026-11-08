@@ -279,7 +279,9 @@ export class MaterialLinkRuntime {
     const ordered = this.all();
     if (ordered.length === 0) return 0;
 
-    // 按「源接口」分组，组内按各自游标轮转 → 分流的两路严格交替。
+    // 按「源接口」分组，组内按各自游标轮转 → 分流的两路按**成功件数**严格交替。
+    // 注意：游标只在成功转移后前进，不能按帧前进 —— 否则物料到达的帧与游标步调无关，
+    // 连续几件会全部落到同一路（真实游戏里曾复现 3/1 的偏斜）。
     const groups = new Map<string, MaterialLinkState[]>();
     for (const state of ordered) {
       const key = portInstanceKey(state.link.from.entityId, state.link.from.slotId);
@@ -287,22 +289,23 @@ export class MaterialLinkRuntime {
       if (list) list.push(state); else groups.set(key, [state]);
     }
     const groupKeys = [...groups.keys()].sort();
-    const rotated: MaterialLinkState[] = [];
+    const rotated: { state: MaterialLinkState; groupKey: string; index: number }[] = [];
     for (let index = 0; index < groupKeys.length; index += 1) {
       const key = groupKeys[(this.cursor + index) % groupKeys.length] as string;
       const list = groups.get(key) as MaterialLinkState[];
       const start = (this.fromCursor.get(key) ?? 0) % list.length;
       for (let offset = 0; offset < list.length; offset += 1) {
-        rotated.push(list[(start + offset) % list.length] as MaterialLinkState);
+        const position = (start + offset) % list.length;
+        rotated.push({ state: list[position] as MaterialLinkState, groupKey: key, index: position });
       }
-      this.fromCursor.set(key, (start + 1) % list.length);
     }
     this.cursor = (this.cursor + 1) % groupKeys.length;
 
     // 同一接口每步最多参与 1 次转移 → 分流不会一次抽干源缓冲，合流不会重复写目标。
     const busy = new Set<string>();
     let moved = 0;
-    for (const state of rotated) {
+    for (const entry of rotated) {
+      const state = entry.state;
       const fromKey = portInstanceKey(state.link.from.entityId, state.link.from.slotId);
       const toKey = portInstanceKey(state.link.to.entityId, state.link.to.slotId);
       if (busy.has(fromKey) || busy.has(toKey)) continue;
@@ -319,6 +322,9 @@ export class MaterialLinkRuntime {
       busy.add(toKey);
       moved += 1;
       this.movedById.set(state.link.id, (this.movedById.get(state.link.id) ?? 0) + 1);
+      // 只有真的送出一件，才把该源接口的「下一个优先连接」前移。
+      const list = groups.get(entry.groupKey) as MaterialLinkState[];
+      this.fromCursor.set(entry.groupKey, (entry.index + 1) % list.length);
     }
     return moved;
   }
