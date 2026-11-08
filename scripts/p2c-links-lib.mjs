@@ -123,6 +123,8 @@ export function createCtx(play, h) {
       const part = await h.placePartAtPoint(pt, slot, 0, label, cell);
       const placed = (await state()).parts.find((entry) => entry.partId === part.partId);
       if (placed && placed.placement.rotation === rotation) return part;
+      console.log('PLACE-RETRY ' + label + ' wanted=' + rotation + ' got='
+        + (placed ? placed.placement.rotation : 'missing') + ' ghost=' + ghost);
       ghost = placed ? placed.placement.rotation : ghost;
       await removePart(cell, part.partId);
       pt = await aim(cell);
