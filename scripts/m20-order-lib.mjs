@@ -125,6 +125,34 @@ export function createOrderKit(play, h) {
 
   const logStep = (label, payload) => console.log('D-EVIDENCE ' + label + '=' + JSON.stringify(payload));
 
+  /**
+   * 真实 UI 流程重新绑定快捷栏：Tab 打开背包 → 点物品行选中 → 点目标快捷栏格绑定 → Esc 关闭。
+   * 唯一数量的机械零件用完后快捷栏会自动解绑（M1.4 既有行为），拆机重建必须先重新绑定。
+   */
+  const bindHotbarFromBackpack = async (itemId, slotIndex) => {
+    const before = await state();
+    if (before.ui.hotbar.slots[slotIndex] === itemId) return;
+    await play.keyboard.press('Tab');
+    await play.advance(0.1);
+    await play.wait(260);
+    const opened = await play.page.evaluate(() => {
+      const backdrop = document.querySelector('.ii-backpack');
+      return backdrop ? !backdrop.hasAttribute('hidden') : false;
+    });
+    assert(opened, 'backpack must open with Tab before re-binding the hotbar');
+    await play.page.click('.ii-row[data-item-id="' + itemId + '"]');
+    await play.wait(140);
+    await play.page.click('.ii-hotbar .ii-slot[data-slot="' + slotIndex + '"]');
+    await play.wait(260);
+    await play.keyboard.press('Escape');
+    await play.advance(0.1);
+    await play.wait(260);
+    const after = await state();
+    assert(after.ui.hotbar.slots[slotIndex] === itemId,
+      'hotbar slot ' + slotIndex + ' must be re-bound to ' + itemId + ', got ' + String(after.ui.hotbar.slots[slotIndex]));
+    logStep('REBIND', { itemId, slotIndex, open: opened, slots: after.ui.hotbar.slots });
+  };
+
   /** 等待 HUD+运行时同时满足条件；keepPowered 时自动补储。 */
   const waitUntil = async (label, predicate, options = {}) => {
     const timeoutMs = options.timeoutMs ?? 30000;
@@ -179,6 +207,6 @@ export function createOrderKit(play, h) {
     getCal: () => cal,
     setCal: (value) => { cal = value; },
     state, producedOf, invOf, machineByRecipe, snap, readUi,
-    rewind, logStep, waitUntil, waitProduction, assertStep,
+    rewind, logStep, bindHotbarFromBackpack, waitUntil, waitProduction, assertStep,
   };
 }

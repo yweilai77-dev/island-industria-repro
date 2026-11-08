@@ -5,7 +5,7 @@ import { CELL, FORGE, SHAFT } from './m20-order-lib.mjs';
 export async function runOrderPhaseB(kit) {
   const {
     play, h, assert, points, evidence, state, producedOf, invOf, machineByRecipe,
-    snap, readUi, logStep, waitUntil, assertStep, getCal, rewind, setCal,
+    snap, readUi, logStep, bindHotbarFromBackpack, waitUntil, assertStep, getCal, rewind, setCal,
   } = kit;
   const cal = getCal();
 
@@ -121,6 +121,10 @@ export async function runOrderPhaseB(kit) {
     assertStep(missing.ui, 'forge-shaft', 'forge dismantled');
     logStep('09-DISMANTLED', { parts: s.parts.length, blocker: missing.ui.blocker, produced: missing.state.production.produced });
     await play.screenshot('13-anomaly-forge-dismantled');
+
+    // 唯一数量的锻压机拆下后库存为 0 时快捷栏 11 格会自动解绑（M1.4 既有行为）；
+    // 重建前必须走真实 UI：Tab 背包 → 选中锻压机 → 点快捷栏第 12 格绑定 → Esc。
+    await bindHotbarFromBackpack('forge', FORGE);
 
     const rebuildPt = await h.pointForCell(cal, CELL.forge, { avoidHover: true });
     await h.placePartAtPoint(rebuildPt, FORGE, 0, 'forge-rebuilt', CELL.forge);
