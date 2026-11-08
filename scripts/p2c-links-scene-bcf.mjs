@@ -10,10 +10,11 @@ export async function runSceneB(play, h, C) {
   const {
     assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    waitFor, removeAllParts,
+    waitFor, removeAllParts, calibrate,
   } = C;
 
   await play.step('10-scene-b-merge-build', async () => {
+    await calibrate('LEVEL0-SCENE-B');
     const placed = await placeLayout(LAYOUT_B);
     await enableAllSources(LAYOUT_B);
     const ready = await waitFor((now) => now.production.machines.length === 3
@@ -121,10 +122,11 @@ export async function runSceneC(play, h, C) {
   const {
     assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo, linksFrom,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    waitFor, removeAllParts,
+    waitFor, removeAllParts, calibrate,
   } = C;
 
   await play.step('20-scene-c-split-build', async () => {
+    await calibrate('LEVEL0-SCENE-C');
     const placed = await placeLayout(LAYOUT_C);
     await enableAllSources(LAYOUT_C);
     const ready = await waitFor((now) => now.production.machines.length === 3
@@ -232,10 +234,11 @@ export async function runSceneF(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo,
     placeLayout, onPart, enableAllSources, feedByC, cycleRecipe,
-    waitFor, removeAllParts, takeByRightClick,
+    waitFor, removeAllParts, takeByRightClick, calibrate,
   } = C;
 
   await play.step('30-scene-f-line-build', async () => {
+    await calibrate('LEVEL0-SCENE-F');
     const placed = await placeLayout(LAYOUT_F);
     await enableAllSources(LAYOUT_F);
     const ready = await waitFor((now) => now.production.machines.length === 3

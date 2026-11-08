@@ -279,6 +279,8 @@ export function createCtx(play, h) {
   };
 
   const calibrate = async (label) => {
+    // 相机是平滑跟随玩家的：刚走完路立刻标定会把"还在滑行"的相机当成稳态。
+    await play.advance(0.8);
     calRef.value = await h.calibrate(label);
     return calRef.value;
   };
