@@ -156,7 +156,16 @@ export function createCtx(play, h) {
     for (let attempt = 0; attempt < 4; attempt += 1) {
       const need = ((((rotation - ghost) % 360) + 360) % 360) / 90;
       await pressRotate(need);
-      const part = await h.placePartAtPoint(pt, slot, 0, label, cell);
+      let part;
+      try {
+        part = await h.placePartAtPoint(pt, slot, 0, label, cell);
+      } catch (error) {
+        const s = await state();
+        console.log('PLACE-FAIL ' + label + ' cell=' + JSON.stringify(cell) + ' slot=' + slot
+          + ' hotbar=' + JSON.stringify(s.ui?.hotbar) + ' selected=' + String(s.ui?.selectedItem)
+          + ' inventory=' + JSON.stringify(s.inventory) + ' parts=' + s.parts.length);
+        throw error;
+      }
       const placed = (await state()).parts.find((entry) => entry.partId === part.partId);
       if (placed && placed.placement.rotation === rotation) return part;
       console.log('PLACE-RETRY ' + label + ' wanted=' + rotation + ' got='
