@@ -85,7 +85,7 @@ export function createPortContext(play, h) {
 
   const removePart = async (cell, partId) => {
     await h.selectSlot(SHAFT);
-    const point = await h.hoverSpecificPart(cal.value, cell, partId);
+    const point = await h.hoverSpecificPart(calRef.value, cell, partId);
     assert(point !== null, 'must be able to aim at part ' + partId + ' to remove it');
     await play.mouse.move(point);
     await play.wait(130);
@@ -109,7 +109,7 @@ export function createPortContext(play, h) {
       // 观测值优先：用真实旋转修正模型，删掉后重试。
       ghost = placed ? placed.placement.rotation : ghost;
       await removePart(cell, part.partId);
-      pt = await h.pointForCell(cal.value, cell, { avoidHover: true });
+      pt = await h.pointForCell(calRef.value, cell, { avoidHover: true });
     }
     throw new Error('could not place ' + label + ' with rotation ' + rotation);
   };
@@ -120,7 +120,7 @@ export function createPortContext(play, h) {
 
   const hoverMachine = async (cell, partId) => {
     await h.selectSlot(SHAFT);
-    const point = await h.hoverSpecificPart(cal.value, cell, partId);
+    const point = await h.hoverSpecificPart(calRef.value, cell, partId);
     assert(point !== null, 'must be able to aim at part ' + partId + ' at ' + JSON.stringify(cell));
     await play.mouse.move(point);
     await play.wait(140);
