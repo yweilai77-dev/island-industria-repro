@@ -93,8 +93,14 @@ export function createCtx(play, h) {
     await play.wait(60);
   };
 
-  /** 按 R 旋转放置幽灵；先移到天空，避免同时切到某台机器的配方。 */
+  /**
+   * 按 R 旋转放置幽灵。
+   * 关键：R 只在「快捷栏选中机械零件」时才旋转幽灵（空槽选中时机械系统让出输入），
+   * 而 pointForCell 探测时会临时切到空槽，所以这里必须先切回机械槽再按 R。
+   * 同时先移到天空，避免 R 被当成「切换悬停机器配方」。
+   */
   const pressRotate = async (times) => {
+    if (times > 0) await h.selectSlot(SHAFT);
     for (let index = 0; index < times; index += 1) {
       await sky();
       await play.keyboard.press('KeyR');
