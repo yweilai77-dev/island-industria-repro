@@ -160,7 +160,15 @@ export function createCtx(play, h) {
 
   const placeLayout = async (layout) => {
     for (const item of layout) {
-      const pt = await aim(item.cell);
+      let pt;
+      try {
+        pt = await aim(item.cell);
+      } catch (error) {
+        // 相机/标定漂移时重新标定一次再试（不改变任何游戏状态）。
+        console.log('PLACE-RECAL ' + item.label + ' reason=' + error.message);
+        await calibrate('RECAL-' + item.label);
+        pt = await aim(item.cell);
+      }
       points[item.label] = pt;
       await placeRotated(pt, item.slot, item.rot, item.label, item.cell);
     }

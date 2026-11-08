@@ -187,7 +187,6 @@ export class PortViewRegistry {
           accent: this.spy(this.assets.accentMesh, accentMaterialOf(this.assets, port)),
         };
         this.boxes.set(key, view);
-        console.log('PORTVIEW-SPAWN ' + key + ' module=' + port.module.id);
       }
       const slot = slotWorldOf(part, port.slot);
       const rotation = quatTuple(quat.fromAxisAngle(quat.create(), [0, 1, 0], slot.yaw * (Math.PI / 180)));
@@ -209,7 +208,6 @@ export class PortViewRegistry {
     for (const [key, view] of [...this.boxes]) {
       if (alive.has(key)) continue;
       this.boxes.delete(key);
-      console.log('PORTVIEW-DESPAWN ' + key);
       this.world.despawn(view.body).unwrap();
       this.world.despawn(view.accent).unwrap();
     }
