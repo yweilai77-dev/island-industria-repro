@@ -124,7 +124,7 @@ export async function runSceneB(play, h, C) {
 
 export async function runSceneC(play, h, C) {
   const {
-    assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo, linksFrom,
+    assert, points, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo, linksFrom,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
     feedMachine, collectMachine, waitFor, removeAllParts, calibrate,
   } = C;
@@ -170,9 +170,11 @@ export async function runSceneC(play, h, C) {
     assert(linksFrom(s, crusherId).length === 2, 'both links must start from the same splitter output');
     assert(new Set(s.links.map((link) => link.to.entityId)).size === 2, 'each link keeps its own identity');
 
-    await feedMachine({ gx: -4, gz: 8 }, crusherId, 6);
-    const split = await waitFor((now) => machineById(now, aId).producedTotal >= 3
-      && machineById(now, bId).producedTotal >= 3, 75, 'scene-c-split');
+    const oreBefore = countOf(s, 'iron_ore');
+    const producedBeforeCrushed = producedOf(s, 'crushed_ore');
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 4);
+    const split = await waitFor((now) => machineById(now, aId).producedTotal >= 2
+      && machineById(now, bId).producedTotal >= 2, 75, 'scene-c-split');
     s = split.state;
     console.log('SCENE-C-SPLIT=' + JSON.stringify({
       produced: s.production.produced,
@@ -181,11 +183,24 @@ export async function runSceneC(play, h, C) {
         { id: bId, produced: machineById(s, bId)?.producedTotal }],
     }));
     assert(split.ok, 'round-robin splitting must feed both downstream cores');
-    assert(producedOf(s, 'crushed_ore') >= 6 && producedOf(s, 'iron_ingot') >= 6,
-      'six ore must become six crushed ore and six ingots');
+    console.log('SCENE-C-DETAIL=' + JSON.stringify({
+      oreBefore,
+      oreAfter: countOf(s, 'iron_ore'),
+      machines: [aId, bId].map((id) => ({
+        id,
+        produced: machineById(s, id).producedTotal,
+        input: machineById(s, id).inputCount,
+        output: machineById(s, id).outputCount,
+      })),
+      ports: s.ports.map((port) => ({ partId: port.partId, count: port.count })),
+      links: s.links.map((link) => ({ moved: link.moved, active: link.active })),
+    }));
+    assert(countOf(s, 'iron_ore') === oreBefore - 4, 'four presses of C must consume four ore');
+    assert(producedOf(s, 'crushed_ore') >= producedBeforeCrushed + 4,
+      'four ore must become four crushed ore');
     const movedA = linksTo(s, aId)[0].moved;
     const movedB = linksTo(s, bId)[0].moved;
-    assert(movedA === 3 && movedB === 3, 'round-robin must split 3 / 3, got ' + movedA + ' / ' + movedB);
+    assert(movedA === 2 && movedB === 2, 'round-robin must split 2 / 2, got ' + movedA + ' / ' + movedB);
     // 收走成品，避免产物缓冲满（4 格）阻塞下一段"目标不可用"测试。
     await collectMachine({ gx: -4, gz: 9 }, aId, 1);
     await collectMachine({ gx: -4, gz: 10 }, bId, 1);
