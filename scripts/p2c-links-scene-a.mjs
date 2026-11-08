@@ -6,7 +6,7 @@ export async function runSceneA(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, partOf, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, hoverPart, onPart, enableAllSources, feedByC,
-    waitFor, removeAllParts, calibrate, constants,
+    takeByRightClick, waitFor, removeAllParts, calibrate, constants,
   } = C;
   const { SHAFT, ORE_TARGET_A, ORE_TARGET_B, ORE_NODE_A_VIEW, ORE_NODE_B_VIEW, BUILD_SPOT } = constants;
 
