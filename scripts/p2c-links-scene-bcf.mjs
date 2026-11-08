@@ -107,8 +107,11 @@ export async function runSceneB(play, h, C) {
     assert(producedOf(s, 'crushed_ore') === crushedBefore + 8, 'both crushers must finish their 4-item batches');
     assert(smelter.inputCount === 4, 'the downstream input buffer must be full and stop transfer');
     assert(mergerBox.count > 0, 'material that cannot enter the machine must wait in the merger buffer');
-    assert(linksTo(s, smelterId).reduce((total, link) => total + link.moved, 0) === movedBefore,
-      'a blocked target must not accept more transfers, and nothing may be duplicated');
+    const movedAfter = linksTo(s, smelterId).reduce((total, link) => total + link.moved, 0);
+    assert(movedAfter === movedBefore + 8,
+      'blocked material must be exactly the 8 delivered items (4 in machine buffer + 4 in merger buffer), got '
+      + (movedAfter - movedBefore));
+    assert(mergerBox.count === 4, 'the merger buffer must be full, which is what stops further transfer');
     assert(heldInPorts(s) + heldInMachines(s) >= 8, 'all blocked material must stay in buffers (nothing lost)');
     await play.screenshot('12-scene-b-full');
   });
