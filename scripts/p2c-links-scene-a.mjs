@@ -206,9 +206,10 @@ export async function runSceneA(play, h, C) {
     assert(s.links.length === 0, 'removing the endpoint must release its material link');
 
     // 没有输入接口：物料停在上游接口盒/缓冲，不丢。
+    const crushedBefore = producedOf(s, 'crushed_ore');
     await feedByC(points['A-crusher'], 2);
-    await play.advance(6);
-    s = await state();
+    const parked = await waitFor((now) => producedOf(now, 'crushed_ore') >= crushedBefore + 2, 14, 'scene-e-parked');
+    s = parked.state;
     assert(heldInPorts(s) + heldInMachines(s) >= 2, 'material must stay in buffers while the input port is missing');
     await play.screenshot('05-scene-e-port-removed');
 
