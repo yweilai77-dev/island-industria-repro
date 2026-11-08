@@ -75,8 +75,10 @@ export const industrialPorts: Plugin = {
 
     ctx.effect(function* () {
       const runtime = new PortRuntime();
-      const bodyMesh = assets.create(createBoxGeometry(0.30, 0.20, 0.16).unwrap()).unwrap();
-      const accentMesh = assets.create(createBoxGeometry(0.14, 0.07, 0.08).unwrap()).unwrap();
+      // 尺寸按「1×1 机器上一眼能认出」标定：机身 0.42×0.30×0.22 嵌在安装面上，
+      // 琥珀色的接口口再向外凸 0.19m —— 玩家能直接看出盒子装在哪一面、朝哪边进料。
+      const bodyMesh = assets.create(createBoxGeometry(0.42, 0.30, 0.22).unwrap()).unwrap();
+      const accentMesh = assets.create(createBoxGeometry(0.20, 0.16, 0.14).unwrap()).unwrap();
       const bodyMaterial = assets.create(
         Materials.standard({ baseColor: [0.52, 0.57, 0.62, 1], metallic: 0.55, roughness: 0.42 }),
       ).unwrap();
@@ -158,9 +160,9 @@ export const industrialPorts: Plugin = {
             }).unwrap();
             world.set(view.accent, Transform, {
               pos: [
-                slot.center[0] + slot.outward[0] * 0.1,
-                slot.center[1] + slot.outward[1] * 0.1,
-                slot.center[2] + slot.outward[2] * 0.1,
+                slot.center[0] + slot.outward[0] * 0.19,
+                slot.center[1] + slot.outward[1] * 0.19,
+                slot.center[2] + slot.outward[2] * 0.19,
               ],
               quat: rotation,
               scale: [1, 1, 1],

@@ -232,6 +232,13 @@ export class ProductionRuntime {
     for (const [partId, state] of this.chutes) {
       const part = this.partMap.get(partId);
       if (!part) continue;
+      // P2-B：堵塞是「暂时」状态而不是永久死亡。堵住的物品停在槽口不动，
+      // 但每帧都在重试交接 —— 下游恢复（装上接口盒 / 盒子腾出空间 / 机器缓冲腾空）
+      // 后物品会自动继续走，不需要玩家干预。位置不重置，所以读数与画面都不抖。
+      if (state.item?.blocked === true) {
+        this.handoff(part, state);
+        continue;
+      }
       advanceChute(state, delta);
       if (!readyForHandoff(state)) continue;
       this.handoff(part, state);

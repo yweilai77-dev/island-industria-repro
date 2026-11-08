@@ -6,6 +6,7 @@ import { PortRuntime } from '../industrial/port-runtime.ts';
 import { createInventoryService, type InventoryService } from '../inventory/inventory.ts';
 import { MECHANICAL_PART_DEFS, type MechanicalPart, type PartId } from '../mechanical/parts.ts';
 import { ProductionRuntime } from '../production/production-runtime.ts';
+import { acceptItem } from '../production/transport.ts';
 
 /**
  * P2-B 物料流集成测试：真实 `ProductionRuntime` + 真实 `PortRuntime` + 共用网关。
@@ -177,6 +178,24 @@ describe('新旧输入路径共存', () => {
     run(target.production, 8);
     expect(target.production.snapshot().produced.find((entry) => entry.itemId === 'iron_ingot')?.count)
       .toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('堵塞是暂时的：下游恢复后自动继续', () => {
+  it('装上接口盒后，之前堵在溜槽上的物品会自动交出去', () => {
+    const target = rig();
+    // 先让溜槽上有一件物品，且没有盒子 → 堵住。
+    acceptItem(target.production.chuteState(CHUTE_ID)!, 'crushed_ore');
+    run(target.production, 2);
+    expect(target.production.chuteState(CHUTE_ID)?.item?.blocked).toBe(true);
+    run(target.production, 2);
+    expect(target.production.chuteState(CHUTE_ID)?.item?.blocked).toBe(true);
+
+    // 装上盒子 → 交接成功 → 物品进入机器输入缓冲（机器无动力，所以留在缓冲里）。
+    installSmelterBox(target);
+    run(target.production, 2);
+    expect(target.production.chuteState(CHUTE_ID)?.item).toBeNull();
+    expect(target.production.machineState(SMELTER_ID)?.inputCount).toBe(1);
   });
 });
 

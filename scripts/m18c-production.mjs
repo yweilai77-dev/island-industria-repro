@@ -6,6 +6,7 @@
 //   运输：破碎机 → 重力溜槽(-2,8) 朝南 → 熔炼炉(-2,9) 输入缓冲
 // 断言：加工依赖动力；断轴时进度冻结；产物经溜槽真的进下一台机器；铁锭进库存；断轴/复电可恢复。
 import { createHarness } from './m18-helpers.mjs';
+import { runForgeStage } from './m18c-production-forge.mjs';
 
 const SHAFT = 0;
 const GEAR12 = 1;
@@ -82,6 +83,30 @@ export default async function playthrough(play) {
     assert(s.production.machines.every((m) => m.powered === false), 'machines must be unpowered before engaging');
     assert(s.production.machines.every((m) => m.block === 'no-power'), 'machines must report no-power before engaging');
     await play.screenshot('02-factory-built');
+  });
+
+  await play.step('02b-install-input-port', async () => {
+    // P2-B（方案 P1）：溜槽不再能直接往机器里倒料，自动输入必须经过输入安装位上的接口盒。
+    // 这条已验收产线因此多了一步：给熔炼炉装上接口盒（盒子来自开局原型套件，之后也能在锻压机造）。
+    await h.selectSlot(SHAFT);
+    const smelterId = (await h.state()).production.machines.find((m) => m.recipeId === 'smelt-crushed-ore').partId;
+    const point = await h.hoverSpecificPart(cal, { gx: -2, gz: 9 }, smelterId);
+    assert(point !== null, 'must be able to aim at the smelter to install the interface box');
+    await play.mouse.move(point);
+    await play.wait(150);
+    const before = (await h.state()).inventory.find((e) => e.itemId === 'interface_box')?.count ?? 0;
+    assert(before >= 1, 'the prototype kit must grant at least one interface box, got ' + before);
+    await play.keyboard.press('KeyT');
+    await play.advance(0.25);
+    const s = await h.state();
+    const afterBox = s.inventory.find((e) => e.itemId === 'interface_box')?.count ?? 0;
+    console.log('PORT-INSTALL=' + JSON.stringify({ before, after: afterBox, ports: s.ports }));
+    assert(afterBox === before - 1, 'installing must consume exactly one interface box (' + before + ' -> ' + afterBox + ')');
+    assert(s.ports.length === 1, 'exactly one installed interface box expected, got ' + JSON.stringify(s.ports));
+    assert(s.ports[0].partId === smelterId, 'the box must be installed on the smelter');
+    assert(s.ports[0].slotId === 'slot.smelter.in.nz', 'the box must sit on the smelter input mount slot');
+    await play.screenshot('02b-interface-box-installed');
+    await h.clearHover();
   });
 
   await play.step('03-wind-and-engage', async () => {
@@ -296,131 +321,6 @@ export default async function playthrough(play) {
   });
 
   await play.step('10-forge-ingots-into-a-part', async () => {
-    // 建锻压机支路：24T(-5,7) 与主链 12T(-5,8) 外啮合 → 轴(-4,7) → 轴(-3,7) → 锻压机(-2,7)
-    const branch = [
-      { cell: { gx: -5, gz: 7 }, slot: GEAR24, rot: 0, label: 'gear24-forge' },
-      { cell: { gx: -4, gz: 7 }, slot: SHAFT, rot: 0, label: 'shaft-f1' },
-      { cell: { gx: -3, gz: 7 }, slot: SHAFT, rot: 0, label: 'shaft-f2' },
-      { cell: { gx: -2, gz: 7 }, slot: FORGE, rot: 0, label: 'forge' },
-    ];
-    for (const item of branch) {
-      const pt = await h.pointForCell(cal, item.cell, { avoidHover: true });
-      points[item.label] = pt;
-      await h.placePartAtPoint(pt, item.slot, item.rot, item.label, item.cell);
-    }
-    await h.clearHover();
-    let s = await h.state();
-    const forge = s.production.machines.find((m) => m.recipeId === 'forge-shaft');
-    console.log('FORGE-BUILT=' + JSON.stringify({
-      parts: s.parts.length,
-      networks: s.networks.map((n) => n.status + ':' + n.partIds.length),
-      forge: forge && { id: forge.partId, powered: forge.powered, block: forge.block },
-      ingots: s.inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0,
-    }));
-    assert(s.parts.length === LAYOUT.length + branch.length,
-      'expected ' + (LAYOUT.length + branch.length) + ' parts, got ' + s.parts.length);
-    assert(forge !== undefined, 'the forge must be tracked as a production machine');
-    assert(forge.powered === true, 'the forge must be driven by the same mechanical network');
-
-    // 补能量 + 保证离合挂着，然后把熔炼炉里已产出的铁锭全部收进库存。
-    await h.holdKey('KeyC', 3000);
-    s = await h.state();
-    if (s.sources[0].enabled !== true) {
-      await h.selectSlot(SHAFT);
-      await h.clickAt(points['flywheel']);
-      await h.rightClickAt(points['flywheel']);
-      await play.advance(0.4);
-    }
-    await h.selectSlot(SHAFT);
-    const smelterId = (await h.state()).production.machines.find((m) => m.recipeId === 'smelt-crushed-ore').partId;
-    const smelterPt = await h.hoverSpecificPart(cal, { gx: -2, gz: 9 }, smelterId);
-    assert(smelterPt !== null, 'must be able to aim at the smelter to collect ingots');
-    for (let i = 0; i < 4; i += 1) {
-      await play.mouse.move(smelterPt);
-      await play.wait(120);
-      await h.rightClickAt(smelterPt);
-      await play.advance(0.3);
-      if (((await h.state()).inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0) >= 2) break;
-    }
-    s = await h.state();
-    const ingots = s.inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0;
-    console.log('INGOTS=' + JSON.stringify({ ingots }));
-    assert(ingots >= 2, 'need at least 2 iron ingots to forge a shaft, got ' + ingots);
-
-    // 悬停锻压机投料（锻压传动轴 = 2 铁锭）
-    await h.selectSlot(SHAFT);
-    const forgeId = (await h.state()).production.machines.find((m) => m.recipeId === 'forge-shaft').partId;
-    const forgePt = await h.hoverSpecificPart(cal, { gx: -2, gz: 7 }, forgeId);
-    assert(forgePt !== null, 'must be able to aim at the forge');
-    await play.mouse.move(forgePt);
-    await play.wait(150);
-    const preFeed = await h.state();
-    console.log('PRE-FEED=' + JSON.stringify({
-      hovered: preFeed.ui?.hoveredPartId,
-      forgeId,
-      ingots: preFeed.inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0,
-      forge: preFeed.production.machines.find((m) => m.partId === forgeId),
-    }));
-    for (let i = 0; i < 2; i += 1) {
-      await play.keyboard.press('KeyC');
-      await play.advance(0.06);
-      const step0 = await h.state();
-      console.log('PRESS-' + i + '=' + JSON.stringify({
-        ingots: step0.inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0,
-        forge: step0.production.machines.find((m) => m.partId === forgeId),
-        allForge: step0.production.machines.filter((m) => m.recipeId === 'forge-shaft').length,
-      }));
-    }
-    s = await h.state();
-    const afterFeed = s.production.machines.find((m) => m.recipeId === 'forge-shaft');
-    console.log('FORGE-FED=' + JSON.stringify({
-      forge: afterFeed,
-      ingots: s.inventory.find((e) => e.itemId === 'iron_ingot')?.count ?? 0,
-    }));
-    assert(afterFeed.running === true || afterFeed.progress > 0, 'the forge must start forging after being fed');
-
-    // 等它锻出一根传动轴并取出。
-    const shaftBefore = s.inventory.find((e) => e.itemId === 'shaft')?.count ?? 0;
-    let forged = false;
-    for (let i = 0; i < 40; i += 1) {
-      await play.advance(1.0);
-      const now = await h.state();
-      const f = now.production.machines.find((m) => m.recipeId === 'forge-shaft');
-      if (f && f.outputCount > 0) {
-        await play.mouse.move(forgePt);
-        await play.wait(120);
-        await h.rightClickAt(forgePt);
-        await play.advance(0.3);
-        const collected = await h.state();
-        const shaftAfter = collected.inventory.find((e) => e.itemId === 'shaft')?.count ?? 0;
-        console.log('FORGED=' + JSON.stringify({ shaftBefore, shaftAfter, produced: collected.production.produced }));
-        assert(shaftAfter > shaftBefore, 'the forged shaft must enter the inventory (' + shaftBefore + ' -> ' + shaftAfter + ')');
-        forged = true;
-        break;
-      }
-      if (now.sources[0].engaged !== true) {
-        await h.holdKey('KeyC', 2200);
-        if ((await h.state()).sources[0].enabled !== true) {
-          await h.selectSlot(SHAFT);
-          await h.clickAt(points['flywheel']);
-          await h.rightClickAt(points['flywheel']);
-        }
-        await play.advance(0.3);
-      }
-    }
-    assert(forged, 'the forge must produce a shaft from 2 iron ingots');
-    await play.screenshot('12-forged-shaft');
-
-    // 产物能继续用于建造：把刚锻出来的传动轴放到空地上（消耗 1 个、机械多 1 件）。
-    const beforeParts = (await h.state()).parts.length;
-    const beforeShafts = (await h.state()).inventory.find((e) => e.itemId === 'shaft')?.count ?? 0;
-    const buildPt = await h.pointForCell(cal, { gx: -4, gz: 6 });
-    await h.placePartAtPoint(buildPt, SHAFT, 0, 'forged-shaft-placed', { gx: -4, gz: 6 });
-    const finalState = await h.state();
-    const afterShafts = finalState.inventory.find((e) => e.itemId === 'shaft')?.count ?? 0;
-    console.log('REINVEST=' + JSON.stringify({ beforeParts, afterParts: finalState.parts.length, beforeShafts, afterShafts }));
-    assert(finalState.parts.length === beforeParts + 1, 'the forged part must be placeable as a real machine part');
-    assert(afterShafts === beforeShafts - 1, 'placing it must consume exactly one shaft from the inventory');
-    await play.screenshot('13-forged-part-used-in-build');
+    await runForgeStage(play, h, { points, cal, assert, LAYOUT, SHAFT, GEAR24, FORGE });
   });
 }
