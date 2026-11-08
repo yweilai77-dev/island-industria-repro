@@ -184,8 +184,8 @@ export async function runSceneC(play, h, C) {
           tick,
           a: { in: ma.inputCount, out: ma.outputCount, prod: ma.producedTotal, powered: ma.powered, block: ma.block },
           b: { in: mb.inputCount, out: mb.outputCount, prod: mb.producedTotal, powered: mb.powered, block: mb.block },
-          links: now.links.map((link) => link.moved),
-          ports: now.ports.map((port) => port.partId + ':' + port.count),
+          links: now.links.map((link) => ({ from: link.from.entityId, to: link.to.entityId, active: link.active, status: link.status, moved: link.moved })),
+          ports: now.ports.map((port) => port.partId + ':' + port.slotId + ':' + port.count), 
           crushed: producedOf(now, 'crushed_ore'),
           ore: countOf(now, 'iron_ore'),
         }));
