@@ -44,17 +44,18 @@ export const LAYOUT_A = [
 /**
  * 场景 B：双路合流。
  * crusher1(-4,7) rot270 输出 px → +Z，正对 smelter(-4,8) rot0 输入 nz；
- * crusher2(-5,7) rot0 输出 px → +X，偏 45° 近距定向进同一合流盒。
+ * crusher2(-3,7) rot180 输出 px → -X，偏 45° 近距定向进同一合流盒。
+ * 注意 (-6,7) 是玩家站位，任何场景布局都不能占用它。
  */
 export const LAYOUT_B = [
-  { cell: { gx: -7, gz: 7 }, slot: POWER, rot: 0, label: 'B-source-crusher2' },
-  { cell: { gx: -6, gz: 7 }, slot: SHAFT, rot: 0, label: 'B-shaft-crusher2' },
-  { cell: { gx: -4, gz: 5 }, slot: POWER, rot: 270, label: 'B-source-crusher1' },
-  { cell: { gx: -4, gz: 6 }, slot: SHAFT, rot: 270, label: 'B-shaft-crusher1' },
   { cell: { gx: -6, gz: 8 }, slot: POWER, rot: 0, label: 'B-source-smelter' },
   { cell: { gx: -5, gz: 8 }, slot: SHAFT, rot: 0, label: 'B-shaft-smelter' },
-  { cell: { gx: -5, gz: 7 }, slot: CRUSHER, rot: 0, label: 'B-crusher2' },
+  { cell: { gx: -4, gz: 5 }, slot: POWER, rot: 270, label: 'B-source-crusher1' },
+  { cell: { gx: -4, gz: 6 }, slot: SHAFT, rot: 270, label: 'B-shaft-crusher1' },
+  { cell: { gx: -1, gz: 7 }, slot: POWER, rot: 180, label: 'B-source-crusher2' },
+  { cell: { gx: -2, gz: 7 }, slot: SHAFT, rot: 180, label: 'B-shaft-crusher2' },
   { cell: { gx: -4, gz: 7 }, slot: CRUSHER, rot: 270, label: 'B-crusher1' },
+  { cell: { gx: -3, gz: 7 }, slot: CRUSHER, rot: 180, label: 'B-crusher2' },
   { cell: { gx: -4, gz: 8 }, slot: SMELTER, rot: 0, label: 'B-smelter' },
 ];
 

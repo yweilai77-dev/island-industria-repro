@@ -33,10 +33,10 @@ export async function runSceneB(play, h, C) {
     let s = await state();
     const smelterId = machineOf(s, 'smelt-crushed-ore').partId;
     const c1Id = partAt(s, -4, 7).partId;
-    const c2Id = partAt(s, -5, 7).partId;
+    const c2Id = partAt(s, -3, 7).partId;
     const sm = { gx: -4, gz: 8 };
     const c1 = { gx: -4, gz: 7 };
-    const c2 = { gx: -5, gz: 7 };
+    const c2 = { gx: -3, gz: 7 };
 
     // 合流盒（L）装在下游输入位；两台上游各装一个输出接口盒（O）。
     await onPart(sm, smelterId, 'KeyL');
