@@ -26,29 +26,46 @@ const ORE_NODE_A_VIEW = { gx: -6, gz: 4 };
 const ORE_NODE_B_VIEW = { gx: 3, gz: -4 };
 const BUILD_SPOT = { gx: -6, gz: 7 };
 
-/** 场景 A / D / E：核心直接对接。 */
+/**
+ * 场景 A / D / E：核心直接对接。
+ * 动力必须经过传动轴：机械端口规则不允许「动力源输出 ←→ 机器输入」直连
+ * （output↔input 不是合法轴向对），所以每个核心用「动力源 → 轴 → 核心」供电。
+ * 布局：轴/源在核心动力面一侧；破碎机(-4,8) rot0 输出 px → 熔炼炉(-3,8) rot90 输入 nz。
+ */
 export const LAYOUT_A = [
-  { cell: { gx: -5, gz: 8 }, slot: POWER, rot: 0, label: 'A-source-crusher' },
+  { cell: { gx: -6, gz: 8 }, slot: POWER, rot: 0, label: 'A-source-crusher' },
+  { cell: { gx: -5, gz: 8 }, slot: SHAFT, rot: 0, label: 'A-shaft-crusher' },
   { cell: { gx: -4, gz: 8 }, slot: CRUSHER, rot: 0, label: 'A-crusher' },
   { cell: { gx: -3, gz: 8 }, slot: SMELTER, rot: 90, label: 'A-smelter' },
-  { cell: { gx: -3, gz: 9 }, slot: POWER, rot: 90, label: 'A-source-smelter' },
+  { cell: { gx: -3, gz: 9 }, slot: SHAFT, rot: 90, label: 'A-shaft-smelter' },
+  { cell: { gx: -3, gz: 10 }, slot: POWER, rot: 90, label: 'A-source-smelter' },
 ];
 
-/** 场景 B：双路合流。 */
+/**
+ * 场景 B：双路合流。
+ * crusher1(-4,7) rot270 输出 px → +Z，正对 smelter(-4,8) rot0 输入 nz；
+ * crusher2(-5,7) rot0 输出 px → +X，偏 45° 近距定向进同一合流盒。
+ */
 export const LAYOUT_B = [
-  { cell: { gx: -6, gz: 7 }, slot: POWER, rot: 0, label: 'B-source-crusher2' },
-  { cell: { gx: -4, gz: 6 }, slot: POWER, rot: 270, label: 'B-source-crusher1' },
-  { cell: { gx: -5, gz: 8 }, slot: POWER, rot: 0, label: 'B-source-smelter' },
+  { cell: { gx: -7, gz: 7 }, slot: POWER, rot: 0, label: 'B-source-crusher2' },
+  { cell: { gx: -6, gz: 7 }, slot: SHAFT, rot: 0, label: 'B-shaft-crusher2' },
+  { cell: { gx: -4, gz: 5 }, slot: POWER, rot: 270, label: 'B-source-crusher1' },
+  { cell: { gx: -4, gz: 6 }, slot: SHAFT, rot: 270, label: 'B-shaft-crusher1' },
+  { cell: { gx: -6, gz: 8 }, slot: POWER, rot: 0, label: 'B-source-smelter' },
+  { cell: { gx: -5, gz: 8 }, slot: SHAFT, rot: 0, label: 'B-shaft-smelter' },
   { cell: { gx: -5, gz: 7 }, slot: CRUSHER, rot: 0, label: 'B-crusher2' },
   { cell: { gx: -4, gz: 7 }, slot: CRUSHER, rot: 270, label: 'B-crusher1' },
   { cell: { gx: -4, gz: 8 }, slot: SMELTER, rot: 0, label: 'B-smelter' },
 ];
 
-/** 场景 C：一路分流到两台下游。 */
+/** 场景 C：一路分流到两台下游（下游 rot90，输入都朝 -X）。 */
 export const LAYOUT_C = [
-  { cell: { gx: -5, gz: 8 }, slot: POWER, rot: 0, label: 'C-source-crusher' },
-  { cell: { gx: -3, gz: 9 }, slot: POWER, rot: 90, label: 'C-source-smelter-a' },
-  { cell: { gx: -2, gz: 9 }, slot: POWER, rot: 90, label: 'C-source-smelter-b' },
+  { cell: { gx: -6, gz: 8 }, slot: POWER, rot: 0, label: 'C-source-crusher' },
+  { cell: { gx: -5, gz: 8 }, slot: SHAFT, rot: 0, label: 'C-shaft-crusher' },
+  { cell: { gx: -3, gz: 10 }, slot: POWER, rot: 90, label: 'C-source-smelter-a' },
+  { cell: { gx: -3, gz: 9 }, slot: SHAFT, rot: 90, label: 'C-shaft-smelter-a' },
+  { cell: { gx: -2, gz: 10 }, slot: POWER, rot: 90, label: 'C-source-smelter-b' },
+  { cell: { gx: -2, gz: 9 }, slot: SHAFT, rot: 90, label: 'C-shaft-smelter-b' },
   { cell: { gx: -4, gz: 8 }, slot: CRUSHER, rot: 0, label: 'C-crusher' },
   { cell: { gx: -3, gz: 8 }, slot: SMELTER, rot: 90, label: 'C-smelter-a' },
   { cell: { gx: -2, gz: 8 }, slot: SMELTER, rot: 90, label: 'C-smelter-b' },
@@ -56,9 +73,12 @@ export const LAYOUT_C = [
 
 /** 场景 F：三台核心串联 + 制造演示。 */
 export const LAYOUT_F = [
-  { cell: { gx: -5, gz: 8 }, slot: POWER, rot: 0, label: 'F-source-crusher' },
-  { cell: { gx: -3, gz: 9 }, slot: POWER, rot: 90, label: 'F-source-smelter' },
-  { cell: { gx: -2, gz: 7 }, slot: POWER, rot: 180, label: 'F-source-forge' },
+  { cell: { gx: -6, gz: 8 }, slot: POWER, rot: 0, label: 'F-source-crusher' },
+  { cell: { gx: -5, gz: 8 }, slot: SHAFT, rot: 0, label: 'F-shaft-crusher' },
+  { cell: { gx: -3, gz: 10 }, slot: POWER, rot: 90, label: 'F-source-smelter' },
+  { cell: { gx: -3, gz: 9 }, slot: SHAFT, rot: 90, label: 'F-shaft-smelter' },
+  { cell: { gx: -1, gz: 7 }, slot: POWER, rot: 180, label: 'F-source-forge' },
+  { cell: { gx: -2, gz: 7 }, slot: SHAFT, rot: 180, label: 'F-shaft-forge' },
   { cell: { gx: -4, gz: 8 }, slot: CRUSHER, rot: 0, label: 'F-crusher' },
   { cell: { gx: -3, gz: 8 }, slot: SMELTER, rot: 90, label: 'F-smelter' },
   { cell: { gx: -3, gz: 7 }, slot: FORGE, rot: 180, label: 'F-forge' },

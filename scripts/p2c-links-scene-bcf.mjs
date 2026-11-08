@@ -78,9 +78,9 @@ export async function runSceneB(play, h, C) {
   await play.step('12-scene-b-downstream-full', async () => {
     let s = await state();
     const smelterId = machineOf(s, 'smelt-crushed-ore').partId;
-    const smSource = partAt(s, -5, 8);
+    const smSource = partAt(s, -6, 8);
     assert(smSource && smSource.kind === 'power-source', 'the smelter power source must exist');
-    await C.setSource({ gx: -5, gz: 8 }, smSource.partId, false);
+    await C.setSource({ gx: -6, gz: 8 }, smSource.partId, false);
     s = await state();
 
     const ingotsBefore = machineById(s, smelterId).producedTotal;
