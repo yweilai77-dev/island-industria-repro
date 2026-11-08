@@ -182,6 +182,16 @@ export async function runSceneC(play, h, C) {
       smelters: [{ id: aId, produced: machineById(s, aId)?.producedTotal },
         { id: bId, produced: machineById(s, bId)?.producedTotal }],
     }));
+    console.log('SCENE-C-MACHINES=' + JSON.stringify({
+      a: { prod: machineById(s, aId).producedTotal, in: machineById(s, aId).inputCount, out: machineById(s, aId).outputCount, powered: machineById(s, aId).powered, block: machineById(s, aId).block },
+      b: { prod: machineById(s, bId).producedTotal, in: machineById(s, bId).inputCount, out: machineById(s, bId).outputCount, powered: machineById(s, bId).powered, block: machineById(s, bId).block },
+      links: s.links.map((link) => ({ to: link.to.entityId, active: link.active, status: link.status, moved: link.moved })),
+      ports: s.ports.map((port) => port.partId + ':' + port.slotId + ':' + port.count),
+      ore: countOf(s, 'iron_ore'),
+      crushed: producedOf(s, 'crushed_ore'),
+      sources: s.sources.map((source) => source.partId + ':' + source.enabled),
+      networks: s.networks.map((network) => ({ id: network.id, status: network.status, machines: network.machineIds })),
+    }));
     assert(split.ok, 'round-robin splitting must feed both downstream cores');
     console.log('SCENE-C-DETAIL=' + JSON.stringify({
       oreBefore,
