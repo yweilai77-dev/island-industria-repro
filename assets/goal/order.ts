@@ -147,7 +147,7 @@ export const INPUT_HINTS: Readonly<Record<GoalMachineKind, string>> = Object.fre
   forge: '按 C 从库存把铁锭投进锻压机，每根传动轴需要 2 个铁锭。',
 });
 
-export const NO_POWER_MESSAGE = '动力网络没有输出：靠近飞轮按住 C 储能，再右键接合离合。';
+export const NO_POWER_MESSAGE = '动力网络没有输出：靠近飞轮按住 C 摇柄补能；若离合未挂上，再右键接合离合。';
 
 export function isGoalMachineKind(kind: PartId): kind is GoalMachineKind {
   return (MACHINE_KINDS as readonly string[]).includes(kind);

@@ -119,6 +119,9 @@ export async function runOrderPhaseB(kit) {
       (u) => u.state === 'active' && u.steps[6].current && u.blocker.includes('缺少锻压机'),
       { timeoutMs: 12000, gameStep: 0.25 });
     assertStep(missing.ui, 'forge-shaft', 'forge dismantled');
+    // 已完成步骤的进度不能因为拆机回退：建造机器锁存后即使少一台也显示满进度（D 修复 M7）。
+    assert(missing.ui.steps[1].completed === true && missing.ui.steps[1].progress === '3 / 3',
+      'completed build-machines must keep showing 3 / 3 after dismantling, got ' + JSON.stringify(missing.ui.steps[1]));
     logStep('09-DISMANTLED', { parts: s.parts.length, blocker: missing.ui.blocker, produced: missing.state.production.produced });
     await play.screenshot('13-anomaly-forge-dismantled');
 
@@ -220,6 +223,9 @@ export async function runOrderPhaseB(kit) {
     const crushedDelta = producedOf(s, 'crushed_ore') - evidence.baseline.crushedOre;
     const ingotDelta = producedOf(s, 'iron_ingot') - evidence.baseline.ironIngot;
     assert(finalUi.count === '8 / 8', 'final HUD must be 8 / 8, got ' + finalUi.count);
+    // 已完成步骤显示满进度：矿石已投进机器，采集行仍必须是 2 / 2（D 修复 M7）。
+    assert(finalUi.steps[0].progress === '2 / 2', 'completed gather-ore must show 2 / 2, got ' + finalUi.steps[0].progress);
+    assert(finalUi.steps[1].progress === '3 / 3', 'completed build-machines must show 3 / 3, got ' + finalUi.steps[1].progress);
     assert(shaftDelta === 1, 'order completion must be backed by exactly 1 really produced shaft, got ' + shaftDelta);
     assert(crushedDelta === 2 && ingotDelta === 2,
       'real production deltas must be 2 crushed / 2 ingot, got ' + crushedDelta + '/' + ingotDelta);
