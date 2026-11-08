@@ -1,4 +1,19 @@
-# 当前进度确认（2026-11-07，M1.8 完成后）
+# 当前进度确认（2026-11-07，M1.8 完成后；2026-11-08 增补 M2.0-P1）
+
+> **2026-11-08 增补：M2.0-P1 第一张工业订单系列（A/B/C/D）完成，D 阶段待负责人独立验收。**
+> 完整验收报告见 [m20/P1-D-REPORT.md](m20/P1-D-REPORT.md)；订单实现与缺陷清单见
+> `artifacts/p1d/code-review.md`，回归结果见 `artifacts/p1d/regression-report.md`（artifacts 不入库）。
+>
+> - M2.0-P1-A：八步订单状态机（真实生产 `produced` 相对订单开始基线的增量判定、latch、阻塞文案）。
+> - M2.0-P1-B：只读 `goalProgress` 服务，每帧映射真实机械/生产/库存快照，不反向控制运行时。
+> - M2.0-P1-C：中文订单 HUD（0/8、当前步、进度、阻塞、异常恢复、完成态），已验收。
+> - M2.0-P1-D：端到端验收完成。真实游戏 8 步 Playthrough（`scripts/m20-first-order.mjs`）0/8 → 8/8，
+>   仅以真实 `production.produced` 增量（2/2/1，基线 0/0/0）判定完成；九项场景有明确结果；
+>   修复 4 项 HUD/阻塞缺陷并加回归测试；`pnpm test` 45 文件 / 422 用例、`typecheck`、`check`、
+>   `build` 全绿，M1 历史 playthrough 7 条在最终代码上全部通过。
+> - 已知遗留（不阻塞 D）：订单快照未进 GameRead（验收读 DOM）、锻压机带料时 R 静默失效、
+>   局部支路过载文案已修但多机/多网络选择语义待后续、订单状态未持久化（与 M2 存档 P0 绑定）。
+
 
 > 本文是**实测核对**后的进度快照，不是计划。路线与完成度标准见 [ROADMAP.md](ROADMAP.md)。
 > M1.8 的完整交付报告（功能、验收逐条对照、已知限制）见 [m18/REPORT.md](m18/REPORT.md)。

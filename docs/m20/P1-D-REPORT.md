@@ -17,7 +17,7 @@
 | 1 | 定向检查现有订单实现 | 完成：Lead + 独立 reviewer 两层检查，reviewer 产出 `artifacts/p1d/code-review.md`（高 0 / 中 7 / 低 9） |
 | 2 | 执行自动化测试及必要补充测试 | 完成：新增 4 个端到端测试文件 + 1 个缺陷回归文件，共 16 个新用例；最终 `pnpm test` **45 文件 / 422 用例全绿** |
 | 3 | 修复发现的阶段内缺陷 | 完成：修复 4 项（M7 已完成步骤进度回退、M3 储能耗尽文案、M2 闭环/多源文案、M1 局部支路过载误报），全部有回归测试 |
-| 4 | 真实游戏 UI 完整订单 Playthrough | 完成：`scripts/m20-first-order.mjs`（174 步，102 s，console 0 / page 0），0/8 → 8/8 |
+| 4 | 真实游戏 UI 完整订单 Playthrough | 完成：`scripts/m20-first-order.mjs`（最终代码上 173 步 / 100.9 s，console 0 / page 0），0/8 → 8/8 |
 | 5 | 最终验收报告 | 本文件 |
 
 核心验收原则核对：
@@ -31,13 +31,16 @@
 
 ## 2. 实际修改文件清单（相对 `08d29dd`）
 
-`git diff --stat 08d29dd`：11 个文件，+1638 / −7。
+`git diff --stat 08d29dd`：14 个文件（13 个代码/测试/脚本 + 本报告与 PROGRESS 文档）；代码/测试/脚本净增约 1.6k 行，文档净增约 0.4k 行，精确值以 `git diff` 为准。
 
 | 文件 | 类型 | 说明 |
 |:--|:--|:--|
-| `assets/goal/goal.ts` | 修改（+74/−7） | D 阶段 4 项缺陷修复：已完成步骤进度归满；闭环/多源专属阻塞文案；局部支路过载识别（start-power 与生产步骤）；no-power 文案 |
+| `assets/goal/goal.ts` | 修改（重写为类型/状态机/快照 + 拆分） | D 阶段 4 项缺陷修复的编排层：已完成步骤进度归满、快照组装、evaluateGoal；为守住 20 KB 提交上限把上下文与阻塞判定拆出 |
+| `assets/goal/goal-context.ts` | 新增 | 只读上下文（零件/机器/网络/产能基线映射）与共享谓词（isPowerStarted、支路停机判定等） |
+| `assets/goal/goal-blockers.ts` | 新增 | 全部阻塞原因与文案：缺料/缺机/缺源/断动力/过载/堵塞/错配方/闭环/多源 |
 | `assets/goal/order.ts` | 修改（+1/−1） | 储能耗尽文案改为「按住 C 摇柄补能；若离合未挂上，再右键接合离合」 |
 | `assets/__tests__/goal-e2e-fixtures.ts` | 新增 | 真实运行时 rig（MechanicalRuntimeState + ProductionRuntime + InventoryService），三种真实布局，摇柄/离合/投料/取货/HUD 一致性断言 |
+| `docs/m20/P1-D-REPORT.md` | 新增 | 本验收报告 |
 | `assets/__tests__/goal-e2e-order.test.ts` | 新增 | 场景 1 完整八步闭环、场景 9 的 24 轴误判防护 |
 | `assets/__tests__/goal-e2e-network.test.ts` | 新增 | 场景 2 真实齿轮闭环、场景 3 真实整网过载、场景 4 断电冻结/恢复 |
 | `assets/__tests__/goal-e2e-production.test.ts` | 新增 | 场景 5 输出缓冲堵塞、场景 6 缺料、场景 7 配方错误、场景 8 拆机重建 |
@@ -111,7 +114,7 @@
 pnpm exec forgeax project play scripts/m20-first-order.mjs --json
 ```
 
-最终运行（D 阶段最终代码）：**passed**，174 步，脚本 83.6 s / 总 102.0 s，
+最终运行（D 阶段最终代码 `d58b57d`）：**passed**，173 步，脚本 83.3 s / 总 100.9 s，
 viewports 1280x720 + 1280x600，`layout: []`（无 HUD 布局警告），
 `errors: {console: 0, page: 0, inputWarnings: 0}`，20 张截图，`rendered: true`。
 
@@ -222,23 +225,61 @@ Playthrough 侧的一个交互事实（非订单缺陷）：唯一数量的机�
 > 回归结果由独立 regression-runner 队友在最终代码上串行复跑，原始日志在
 > `artifacts/p1d/regression/`，汇总见 `artifacts/p1d/regression-report.md`。
 
-REGRESSION_SECTION_PLACEHOLDER
+最终代码（HEAD `d58b57d`）回归：**9/9 通过**，7 条 playthrough 全部 `passed:true`、
+console/page error 全为 0、截图全部 `rendered:true`、1280x720 与 1280x600 两个 viewport 的 HUD layout 检查均无 warning。
+
+| # | 命令 | 结果 | steps | 耗时 | console/page |
+|:-:|:--|:--|--:|--:|:--|
+| 1 | `project check --json` | ✅ ok:true | — | 82 s | — |
+| 2 | `project build` | ✅ exit 0（208 artifacts / 21,631,533 B） | — | 14 s | — |
+| 3 | `play scripts/m20c-hud.mjs`（C 阶段 HUD） | ✅ passed | 93 | 80,186 ms | 0 / 0 |
+| 4 | `play scripts/m18c-production.mjs`（M1.8 生产链） | ✅ passed | 133 | 112,435 ms | 0 / 0 |
+| 5 | `play scripts/playthrough.mjs`（M1.5/1.6 基础） | ✅ passed | 9 | 140,044 ms | 0 / 0 |
+| 6 | `play scripts/m17b-playthrough.mjs`（运动学） | ✅ passed | 23 | 40,081 ms | 0 / 0 |
+| 7 | `play scripts/m17c-cyclic.mjs`（闭环拒绝） | ✅ passed | 4 | 33,224 ms | 0 / 0 |
+| 8 | `play scripts/m17c-overload.mjs`（过载） | ✅ passed | 9 | 39,062 ms | 0 / 0 |
+| 9 | `play scripts/m17c-playthrough.mjs`（M1.7-C 主验收） | ✅ passed | 11 | 37,498 ms | 0 / 0 |
+
+过程说明：回归首轮曾在 10:17–10:18 与 Lead 的 goal.ts 拆分写盘窗口重叠，导致 m17b 出现一次
+`advance-failed` 假失败（失败截图是 dev server 整页 reload 的加载画面、state revision 回到 0）；
+源码冻结后在最终代码上重跑通过。首轮旧代码结果已在 `artifacts/p1d/regression-report.md` 的 B 区
+单独列示、不计入回归结论。
 
 ---
 
 ## 10. Git 与工作区状态
 
 - D 阶段基线：`08d29dd`；最终代码由后台 autosave 自动提交（`d23e9ef`、`8bd0f47`、`644bdea` 等）。
-- 变更规模：11 个文件，+1638 / −7（`git diff --stat 08d29dd`）。
+- 变更规模：14 个文件（13 个代码/测试/脚本 + 本报告与 PROGRESS 文档）。
 - 工作区：见下（报告生成时；autosave 运行中，最终以 `git status` 为准）。
 
-GIT_SECTION_PLACEHOLDER
+- 最终代码：`d58b57d`（autosave 2026-11-08 10:19:27，7 个文件）；
+- 相对 D 阶段基线 `08d29dd`：14 个文件（13 个代码/测试/脚本 + 本报告与 PROGRESS 文档）；
+- 提交方式：项目后台 autosave（无人工改写历史、无 `--no-verify`）；所有代码文件均 < 20 KB 提交上限，
+  `goal.ts` 因此按职责拆为 `goal-context.ts` / `goal-blockers.ts` + 主文件 re-export；
+- 报告生成时 `git status`：除本报告自身的最后一次文档更新外工作区 clean（autosave 会提交它）；
+- `artifacts/`（Playthrough 截图、play.json、回归日志、reviewer 探针）按 .gitignore 约定不入库。
 
 ---
 
 ## 11. DSH Token 使用统计
 
-TOKEN_SECTION_PLACEHOLDER
+统计口径：DSH 会话 transcript 中每次模型调用的 usage 汇总（`inputTokens / outputTokens / cacheReadTokens / totalTokens`；
+`totalTokens = inputTokens + outputTokens + cacheReadTokens`）。统计范围为本任务涉及的 4 个会话：
+Lead + test-engineer（测试补充）+ reviewer（定向审查）+ regression-runner（回归）。
+
+| 会话 | 角色 | calls | 输入 tokens | 输出 tokens | 缓存命中 tokens | 总消耗 tokens |
+|:--|:--|--:|--:|--:|--:|--:|
+| session-98c6d2f8 | Lead | 162 | 236,469 | 133,159 | 37,386,112 | 37,755,740 |
+| 5d020b3b | test-engineer | 27 | 101,873 | 66,118 | 3,303,552 | 3,471,543 |
+| f62550d3 | reviewer | 90 | 197,016 | 101,043 | 13,922,688 | 14,220,747 |
+| 6801ff2a | regression-runner | 44 | 41,326 | 43,430 | 2,867,456 | 2,952,212 |
+| **合计** | 4 会话 | **323** | **576,684** | **343,750** | **57,479,808** | **58,400,242** |
+
+- 输入合计 576,684 tokens（不含缓存命中；缓存命中 57,479,808 tokens 按 DSH 计费口径单列）；
+- 输出合计 343,750 tokens（含工具调用之间产生的模型输出，不含 reasoning 单独计费项——本模型该字段为 0）；
+- **总消耗合计 58,400,242 tokens**；统计时间 2026-11-08 10:35（+08:00），会话结束后不再增长。
+- 汇总脚本：`node artifacts/p1d/token-report2.cjs "<sessions 根目录>" 1794102000000`（只读 transcript，不写游戏状态）。
 
 ---
 
@@ -248,7 +289,7 @@ TOKEN_SECTION_PLACEHOLDER
 |:--|:--|
 | 自动化测试通过 | ✅ 45 文件 / 422 用例 |
 | 九项测试场景均有明确结果 | ✅ §4（9/9 通过，证据可复现） |
-| 真实游戏完整订单 Playthrough 成功 | ✅ 174 步，0/8 → 8/8，console/page 0 |
+| 真实游戏完整订单 Playthrough 成功 | ✅ 最终代码 173 步，0/8 → 8/8，console/page 0 |
 | 生产数量判定使用真实数据 | ✅ produced 增量 2/2/1，基线 0/0/0，不用库存/HUD 值 |
 | HUD 与运行时状态一致 | ✅ 每步 DOM 断言 + GameRead 断言；1280x720/600 无布局警告 |
 | 订单异常与恢复逻辑正确 | ✅ 断电冻结/恢复、拆机重建、闭环、过载、堵塞、缺料、错配方均有测试 |
