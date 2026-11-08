@@ -6,7 +6,7 @@ export async function runSceneA(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, partOf, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, hoverPart, onPart, enableAllSources, feedByC,
-    takeByRightClick, waitFor, removeAllParts, calibrate, constants,
+    feedMachine, collectMachine, takeByRightClick, waitFor, removeAllParts, calibrate, constants,
   } = C;
   const { SHAFT, ORE_TARGET_A, ORE_TARGET_B, ORE_NODE_A_VIEW, ORE_NODE_B_VIEW, BUILD_SPOT } = constants;
 
@@ -85,7 +85,7 @@ export async function runSceneA(play, h, C) {
 
     // 「相邻 ≠ 自动连接」：只装盒子、还没有建立连接时，产物不会自己过到下游。
     const oreBefore = countOf(s, 'iron_ore');
-    await feedByC(points['A-crusher'], 2);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 2);
     s = await state();
     assert(countOf(s, 'iron_ore') === oreBefore - 2, 'pressing C twice must consume 2 ore');
     const crushed = await waitFor((now) => producedOf(now, 'crushed_ore') >= 1, 8, 'crushed-before-link');
@@ -115,7 +115,7 @@ export async function runSceneA(play, h, C) {
     assert(producedOf(s, 'iron_ingot') >= 2, 'the smelter must smelt the delivered crushed ore');
     assert(linksTo(s, smelterId)[0].moved >= 2, 'the link read projection must count the transferred items');
     // 收走铁锭，给后续场景留出成品缓冲（产物缓冲只有 4 格，收走后才能继续产出）。
-    await takeByRightClick(points['A-smelter'], 1);
+    await collectMachine({ gx: -3, gz: 8 }, smelterId, 1);
     await play.screenshot('03-scene-a-linked');
   });
 
@@ -133,7 +133,7 @@ export async function runSceneA(play, h, C) {
     console.log('SCENE-D-UNLINK=' + JSON.stringify({ links: s.links, ports: s.ports }));
     assert(s.links.length === 0, 'H must remove the material link');
 
-    await feedByC(points['A-crusher'], 2);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 2);
     const crushedBefore = producedOf(s, 'crushed_ore');
     const held = await waitFor((now) => producedOf(now, 'crushed_ore') >= crushedBefore + 2, 14, 'scene-d-held');
     s = held.state;
@@ -207,7 +207,7 @@ export async function runSceneA(play, h, C) {
 
     // 没有输入接口：物料停在上游接口盒/缓冲，不丢。
     const crushedBefore = producedOf(s, 'crushed_ore');
-    await feedByC(points['A-crusher'], 2);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 2);
     const parked = await waitFor((now) => producedOf(now, 'crushed_ore') >= crushedBefore + 2, 14, 'scene-e-parked');
     s = parked.state;
     assert(heldInPorts(s) + heldInMachines(s) >= 2, 'material must stay in buffers while the input port is missing');

@@ -140,6 +140,15 @@ export function createCtx(play, h) {
     ghost = (ghost + 90) % 360;
   };
 
+  /** 悬停到指定机器再按 R 切配方（不依赖缓存屏幕点）。 */
+  const cycleRecipeAt = async (cell, partId) => {
+    const point = await hoverPart(cell, partId);
+    await play.keyboard.press('KeyR');
+    await play.advance(0.25);
+    ghost = (ghost + 90) % 360;
+    return point;
+  };
+
   const aim = async (cell) => h.pointForCell(calRef.value, cell, { avoidHover: true });
 
   /** 放置并要求最终旋转等于 rotation（观测值优先，不满足就删掉重试）。 */
@@ -242,6 +251,23 @@ export function createCtx(play, h) {
     }
   };
 
+  /** 悬停到指定机器再按 C 投料（不依赖放置时缓存的屏幕点，避免瞄到隔壁机器）。 */
+  const feedMachine = async (cell, partId, times) => {
+    const point = await hoverPart(cell, partId);
+    await feedByC(point, times);
+  };
+
+  /** 悬停到指定机器再右键取货（产物缓冲只有 4 格，收走才能继续生产）。 */
+  const collectMachine = async (cell, partId, times = 1) => {
+    const point = await hoverPart(cell, partId);
+    for (let index = 0; index < times; index += 1) {
+      await play.mouse.move(point);
+      await play.wait(140);
+      await h.rightClickAt(point);
+      await play.advance(0.4);
+    }
+  };
+
   const takeByRightClick = async (point, times = 1) => {
     for (let index = 0; index < times; index += 1) {
       await play.mouse.move(point);
@@ -317,6 +343,7 @@ export function createCtx(play, h) {
     sky,
     pressRotate,
     cycleRecipe,
+    cycleRecipeAt,
     aim,
     placeLayout,
     placeRotated,
@@ -326,6 +353,8 @@ export function createCtx(play, h) {
     setSource,
     enableAllSources,
     feedByC,
+    feedMachine,
+    collectMachine,
     takeByRightClick,
     waitFor,
     removePart,

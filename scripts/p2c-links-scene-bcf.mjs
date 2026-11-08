@@ -10,7 +10,7 @@ export async function runSceneB(play, h, C) {
   const {
     assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    waitFor, removeAllParts, calibrate,
+    feedMachine, collectMachine, waitFor, removeAllParts, calibrate,
   } = C;
 
   await play.step('10-scene-b-merge-build', async () => {
@@ -59,8 +59,8 @@ export async function runSceneB(play, h, C) {
     assert(s.links.every((link) => link.to.entityId === smelterId), 'both links must enter the same smelter');
     assert(new Set(s.links.map((link) => link.from.entityId)).size === 2, 'each input keeps its own identity');
 
-    await feedByC(points['B-crusher1'], 2);
-    await feedByC(points['B-crusher2'], 2);
+    await feedMachine(c1, c1Id, 2);
+    await feedMachine(c2, c2Id, 2);
     const merged = await waitFor((now) => machineById(now, smelterId).producedTotal >= 4, 45, 'scene-b-merge');
     s = merged.state;
     console.log('SCENE-B-MERGED=' + JSON.stringify({
@@ -87,8 +87,9 @@ export async function runSceneB(play, h, C) {
     const ingotsBefore = machineById(s, smelterId).producedTotal;
     const crushedBefore = producedOf(s, 'crushed_ore');
     const movedBefore = linksTo(s, smelterId).reduce((total, link) => total + link.moved, 0);
-    await feedByC(points['B-crusher1'], 4);
-    await feedByC(points['B-crusher2'], 4);
+    const c2Id2 = partAt(s, -3, 7).partId;
+    await feedMachine({ gx: -4, gz: 7 }, partAt(s, -4, 7).partId, 4);
+    await feedMachine({ gx: -3, gz: 7 }, c2Id2, 4);
     await play.advance(32);
     s = await state();
 
@@ -122,7 +123,7 @@ export async function runSceneC(play, h, C) {
   const {
     assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo, linksFrom,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    waitFor, removeAllParts, calibrate,
+    feedMachine, collectMachine, waitFor, removeAllParts, calibrate,
   } = C;
 
   await play.step('20-scene-c-split-build', async () => {
@@ -166,7 +167,7 @@ export async function runSceneC(play, h, C) {
     assert(linksFrom(s, crusherId).length === 2, 'both links must start from the same splitter output');
     assert(new Set(s.links.map((link) => link.to.entityId)).size === 2, 'each link keeps its own identity');
 
-    await feedByC(points['C-crusher'], 6);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 6);
     const split = await waitFor((now) => machineById(now, aId).producedTotal >= 3
       && machineById(now, bId).producedTotal >= 3, 45, 'scene-c-split');
     s = split.state;
@@ -183,8 +184,8 @@ export async function runSceneC(play, h, C) {
     const movedB = linksTo(s, bId)[0].moved;
     assert(movedA === 3 && movedB === 3, 'round-robin must split 3 / 3, got ' + movedA + ' / ' + movedB);
     // 收走成品，避免产物缓冲满（4 格）阻塞下一段"目标不可用"测试。
-    await C.takeByRightClick(points['C-smelter-a'], 1);
-    await C.takeByRightClick(points['C-smelter-b'], 1);
+    await collectMachine({ gx: -3, gz: 8 }, aId, 1);
+    await collectMachine({ gx: -2, gz: 8 }, bId, 1);
     await play.screenshot('21-scene-c-split');
   });
 
@@ -204,7 +205,7 @@ export async function runSceneC(play, h, C) {
     console.log('SCENE-C-UNLINK-B=' + JSON.stringify({ links: s.links }));
     assert(linksFrom(s, crusherId).length === 1, 'removing a link must leave only one splitter output connected');
 
-    await feedByC(points['C-crusher'], 2);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 2);
     const remaining = await waitFor((now) => machineById(now, aId).producedTotal >= aProduced + 2, 35, 'scene-c-route-a');
     s = remaining.state;
     console.log('SCENE-C-ROUTE=' + JSON.stringify({
@@ -233,8 +234,8 @@ export async function runSceneC(play, h, C) {
 export async function runSceneF(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo,
-    placeLayout, onPart, enableAllSources, feedByC, cycleRecipe,
-    waitFor, removeAllParts, takeByRightClick, calibrate,
+    placeLayout, onPart, enableAllSources, feedByC, feedMachine, cycleRecipeAt, collectMachine,
+    waitFor, removeAllParts, calibrate,
   } = C;
 
   await play.step('30-scene-f-line-build', async () => {
@@ -279,7 +280,7 @@ export async function runSceneF(play, h, C) {
     assert(s.links.length === 2, 'the three-core line needs two material links');
     assert(s.links.every((link) => link.active === true), 'both links must be active');
 
-    await feedByC(points['F-crusher'], 2);
+    await feedMachine({ gx: -4, gz: 8 }, crusherId, 2);
     const chain = await waitFor((now) => machineById(now, forgeId).producedTotal >= 1, 60, 'scene-f-chain');
     s = chain.state;
     console.log('SCENE-F-CHAIN=' + JSON.stringify({
@@ -300,11 +301,9 @@ export async function runSceneF(play, h, C) {
     let s = await state();
     const forgeId = machineOf(s, 'forge-shaft').partId;
     const fg = { gx: -3, gz: 7 };
-    const forgePoint = points['F-forge'];
 
     // 先取走已锻好的传动轴，避免产物缓冲混装。
-    await C.hoverPart(fg, forgeId);
-    await takeByRightClick(forgePoint, 1);
+    await collectMachine(fg, forgeId, 1);
     s = await state();
     assert(countOf(s, 'shaft') >= 1, 'the forged shaft must be collectable');
 
@@ -312,7 +311,7 @@ export async function runSceneF(play, h, C) {
     for (let guard = 0; guard < 10; guard += 1) {
       s = await state();
       if (machineOf(s, 'forge-output-box')) break;
-      await cycleRecipe(forgePoint);
+      await cycleRecipeAt(fg, forgeId);
     }
     s = await state();
     console.log('SCENE-F-RECIPE=' + JSON.stringify({ recipe: machineById(s, forgeId).recipeId }));
@@ -323,8 +322,7 @@ export async function runSceneF(play, h, C) {
     const forged = await waitFor((now) => producedOf(now, 'output_interface_box') >= 1, 60, 'scene-f-craft');
     s = forged.state;
     assert(forged.ok, 'the forge must produce a real output interface box');
-    await C.hoverPart(fg, forgeId);
-    await takeByRightClick(forgePoint, 1);
+    await collectMachine(fg, forgeId, 1);
     s = await state();
     console.log('SCENE-F-CRAFT=' + JSON.stringify({
       boxBefore,
