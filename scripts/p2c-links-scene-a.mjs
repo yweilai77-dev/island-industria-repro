@@ -13,6 +13,16 @@ export async function runSceneA(play, h, C) {
   await play.step('01-harvest-ore', async () => {
     await h.learnMovement();
     await calibrate('LEVEL0-ORE-A');
+    // 中央有固定平台(-4..-1,3..4 楼梯 / 0..8,2..8 平台)，跨区移动必须绕开它。
+    const VIA_SOUTH_WEST = [{ gx: -8, gz: 4 }, { gx: -8, gz: -4 }];
+    const VIA_WEST = [{ gx: -8, gz: -4 }, { gx: -8, gz: 7 }];
+    const walk = async (waypoints, finalCell) => {
+      for (const waypoint of waypoints) {
+        assert(await h.gotoCell(waypoint, 16000, true), 'must reach waypoint ' + JSON.stringify(waypoint));
+      }
+      assert(await h.gotoCell(finalCell, 20000, true), 'must reach ' + JSON.stringify(finalCell));
+    };
+
     assert(await h.gotoCell(ORE_NODE_A_VIEW, 16000, true), 'must reach iron ore node A');
     const before = countOf(await state(), 'iron_ore');
     for (let index = 0; index < ORE_TARGET_A; index += 1) {
@@ -24,7 +34,7 @@ export async function runSceneA(play, h, C) {
     console.log('HARVEST-A=' + JSON.stringify({ before, afterA }));
     assert(afterA >= before + ORE_TARGET_A - 1, 'harvesting node A must add iron ore');
 
-    assert(await h.gotoCell(ORE_NODE_B_VIEW, 20000, true), 'must reach iron ore node B');
+    await walk(VIA_SOUTH_WEST, ORE_NODE_B_VIEW);
     for (let index = 0; index < ORE_TARGET_B; index += 1) {
       await play.keyboard.press('KeyF');
       await play.advance(3.4);
@@ -33,11 +43,12 @@ export async function runSceneA(play, h, C) {
     const ore = countOf(await state(), 'iron_ore');
     console.log('HARVEST-B=' + JSON.stringify({ afterA, ore }));
     assert(ore >= afterA + ORE_TARGET_B - 1, 'harvesting node B must add iron ore');
+
+    await walk(VIA_WEST, BUILD_SPOT);
     await play.screenshot('01-harvested');
   });
 
   await play.step('02-scene-a-build-line', async () => {
-    assert(await h.gotoCell(BUILD_SPOT, 20000, true), 'must walk to the building spot');
     await calibrate('LEVEL0-WORK');
     let s = await placeLayout(LAYOUT_A);
     await enableAllSources(LAYOUT_A);
