@@ -15,6 +15,7 @@ import {
   type UiErrorMessage,
   type UiStateMessage,
 } from './protocol.ts';
+import { buildGoalView, goalViewSignature, type UiGoalState } from './goal-view.ts';
 
 const SYSTEM_NAME = 'island-industria/game-ui-bridge';
 
@@ -45,16 +46,23 @@ export const gameUiBridge: Plugin = {
     const definitions = itemDefinitions();
     const countOf = (itemId: ItemId): number => inventory.count(itemId);
 
+    // 目标进度服务由机械运行时稍后提供：按需读取，不做注入，避免打乱插件挂载顺序。
+    const readGoal = (): UiGoalState | null => buildGoalView(ctx.get('goalProgress')?.snapshot());
+    const signatureWithGoal = (goal: UiGoalState | null): string =>
+      stateSignature(definitions, countOf, hotbar.revision) + '|' + goalViewSignature(goal);
+
     const sendState = (): void => {
       revision += 1;
+      const goal = readGoal();
       const message: UiStateMessage = buildStateMessage({
         revision,
         definitions,
         totals: collectTotals(definitions, countOf),
         slots: hotbar.slots,
         selected: hotbar.selected,
+        goal,
       });
-      lastSignature = stateSignature(definitions, countOf, hotbar.revision);
+      lastSignature = signatureWithGoal(goal);
       try {
         port.postMessage(message);
       } catch (error) {
@@ -124,7 +132,8 @@ export const gameUiBridge: Plugin = {
           queries: [],
           fn: () => {
             hotbar.dropUnavailable((itemId) => inventory.count(itemId));
-            const signature = stateSignature(definitions, countOf, hotbar.revision);
+            const goal = readGoal();
+            const signature = signatureWithGoal(goal);
             if (signature !== lastSignature) sendState();
           },
         })

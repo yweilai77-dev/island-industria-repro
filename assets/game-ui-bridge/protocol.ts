@@ -5,6 +5,7 @@ import {
   type ItemId,
 } from '../items/items.ts';
 import { HOTBAR_SLOT_COUNT, type HotbarSlot } from '../hotbar/hotbar.ts';
+import type { UiGoalState } from './goal-view.ts';
 
 /** 前端与 Engine 之间的 UI 协议版本。 */
 export const UI_PROTOCOL_VERSION = 1;
@@ -28,6 +29,8 @@ export interface UiStateMessage {
     readonly slots: readonly HotbarSlot[];
     readonly selected: number;
   };
+  /** 第一份工业订单的 HUD 数据；机械运行时尚未就绪时为 null。 */
+  readonly goal: UiGoalState | null;
 }
 
 export interface UiErrorMessage {
@@ -95,6 +98,8 @@ export function buildStateMessage(input: {
   readonly totals: ReadonlyMap<ItemId, number>;
   readonly slots: readonly HotbarSlot[];
   readonly selected: number;
+  /** 工业订单 HUD 数据；缺省 / null 表示服务尚未就绪。 */
+  readonly goal?: UiGoalState | null;
 }): UiStateMessage {
   const items: CatalogItem[] = [];
   for (const definition of input.definitions) {
@@ -115,6 +120,7 @@ export function buildStateMessage(input: {
     revision: input.revision,
     items,
     hotbar: { slots: [...input.slots], selected: input.selected },
+    goal: input.goal ?? null,
   };
 }
 

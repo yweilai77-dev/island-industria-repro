@@ -64,4 +64,53 @@ export const FRONTEND_UI_CSS = `
 .ii-hint { position: absolute; left: 50%; bottom: calc(var(--ii-slot-size) + 42px); transform: translateX(-50%);
   font-size: 12px; color: #8aa3bb; background: rgba(8,13,19,0.8); border: 1px solid #22303d;
   border-radius: 6px; padding: 4px 10px; pointer-events: none; z-index: 25; }
+
+/* ---- 工业订单 HUD（M2.0-P1-C）----
+   左上角任务区：位于 3D 矿石计数下方，顶部/左侧留出安全边距。
+   面板主体不接收指针事件（不拦截建造点击），只有右上角展开/收起按钮可点击。 */
+.ii-goal { position: absolute; left: 16px; top: 146px; width: 302px; z-index: 12;
+  pointer-events: none; display: flex; flex-direction: column;
+  background: rgba(8, 14, 20, 0.86); border: 1px solid #2b3d4f; border-left: 3px solid #e8873a;
+  border-radius: 12px; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55); }
+.ii-goal[data-state="complete"] { border-left-color: #7dff9b; }
+.ii-goal[data-state="init"] { border-left-color: #4a5d70; }
+.ii-goal-head { position: relative; padding: 9px 10px 8px; display: flex; flex-direction: column; gap: 4px; }
+.ii-goal-title-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding-right: 24px; }
+.ii-goal-title { font-size: 13px; font-weight: 700; letter-spacing: 0.5px; color: #f2e7dc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ii-goal-count { font-size: 12px; font-weight: 700; color: #e8873a; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ii-goal[data-state="complete"] .ii-goal-count { color: #7dff9b; }
+.ii-goal-sub { font-size: 11px; color: #9fb3c8; line-height: 1.35; }
+.ii-goal-bar { height: 4px; border-radius: 2px; background: #16222e; overflow: hidden; }
+.ii-goal-bar > i { display: block; height: 100%; width: 0; border-radius: 2px; background: #e8873a; transition: width 160ms ease-out; }
+.ii-goal[data-state="complete"] .ii-goal-bar > i { background: #7dff9b; }
+.ii-goal-toggle { position: absolute; right: 6px; top: 6px; width: 20px; height: 20px; padding: 0; line-height: 18px;
+  border: 1px solid #33475a; border-radius: 5px; background: #101b26; color: #9fb3c8; font-size: 11px;
+  cursor: pointer; pointer-events: auto; }
+.ii-goal-toggle:hover { color: #f2e7dc; border-color: #5b7e9c; }
+.ii-goal-current-line { display: none; font-size: 11px; color: #e8873a; }
+.ii-goal-body { display: flex; flex-direction: column; gap: 6px; padding: 0 10px 9px; }
+.ii-goal-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.ii-goal-step { display: flex; align-items: center; gap: 6px; min-height: 20px; padding: 0 5px; border-radius: 5px;
+  font-size: 11.5px; line-height: 1.3; color: #7f97ad; }
+.ii-goal-step.current { color: #f6ede3; background: rgba(232, 135, 58, 0.14); box-shadow: inset 2px 0 0 #e8873a; }
+.ii-goal-step.completed { color: #9fd9b4; }
+.ii-goal-step.completed .ii-goal-step-icon { color: #7dff9b; }
+.ii-goal-step.current .ii-goal-step-icon { color: #e8873a; }
+.ii-goal-step-icon { flex: none; width: 14px; text-align: center; font-size: 11px; font-weight: 700; }
+.ii-goal-step-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ii-goal-step-progress { flex: none; font-size: 10.5px; color: #57d4ff; font-variant-numeric: tabular-nums; }
+.ii-goal-step.completed .ii-goal-step-progress { color: #6f8aa3; }
+.ii-goal-detail { border-top: 1px solid #22303d; padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.ii-goal-detail-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ii-goal-detail-label { font-size: 10px; letter-spacing: 1px; color: #6f8aa3; }
+.ii-goal-detail-progress { font-size: 11px; color: #57d4ff; font-variant-numeric: tabular-nums; }
+.ii-goal-detail-title { font-size: 12.5px; font-weight: 700; color: #f2e7dc; }
+.ii-goal-detail-desc { font-size: 11px; line-height: 1.4; color: #9fb3c8; }
+.ii-goal-blocker { font-size: 11px; line-height: 1.4; color: #ffc857; }
+.ii-goal-status { font-size: 11px; color: #7dff9b; }
+.ii-goal-complete { border-top: 1px solid #22303d; padding-top: 6px; font-size: 11.5px; line-height: 1.45; color: #7dff9b; }
+.ii-goal-collapsed .ii-goal-sub, .ii-goal-collapsed .ii-goal-bar { display: none; }
+.ii-goal-collapsed .ii-goal-body { display: none; }
+.ii-goal-collapsed .ii-goal-current-line { display: block; }
+.ii-goal [hidden] { display: none !important; }
 `;

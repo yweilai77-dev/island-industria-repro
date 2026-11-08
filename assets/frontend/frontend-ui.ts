@@ -6,6 +6,7 @@ import type { Plugin } from '@forgeax/engine/plugin';
 import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import { itemIconSvg } from './icons.ts';
 import { FRONTEND_UI_CSS } from './frontend-ui-styles.ts';
+import { createGoalPanel } from './frontend-goal-panel.ts';
 import { PROTOCOL_VERSION, isOkResult, parseState } from './frontend-ui-protocol.ts';
 import type { CatalogItem, HostLike, StateMessage, UiState } from './frontend-ui-protocol.ts';
 
@@ -43,6 +44,7 @@ export const frontendUi: Plugin = {
       items: [],
       hotbar: { slots: new Array(HOTBAR_SLOT_COUNT).fill(null), selected: 0 },
       selectedItemId: null,
+      goal: null,
     };
 
     const doc = root.ownerDocument;
@@ -53,6 +55,10 @@ export const frontendUi: Plugin = {
     const shell = doc.createElement('div');
     shell.className = 'ii-ui';
     root.appendChild(shell);
+
+    // ---- 工业订单 HUD（只读展示，不拦截游戏输入）----
+    const goalPanel = createGoalPanel(doc);
+    shell.appendChild(goalPanel.element);
 
     // ---- 快捷栏 ----
     const hotbar = doc.createElement('div');
@@ -255,6 +261,7 @@ export const frontendUi: Plugin = {
       hint.textContent = ui.open ? '' : 'Tab 打开背包';
       hint.style.display = ui.open ? 'none' : 'block';
       renderHotbar();
+      goalPanel.render(ui.goal);
       if (ui.open) {
         renderList();
         renderDetail();
@@ -417,6 +424,7 @@ export const frontendUi: Plugin = {
         ui.revision = typeof message.revision === 'number' ? message.revision : ui.revision;
         ui.items = parsed.items;
         ui.hotbar = parsed.hotbar;
+        ui.goal = parsed.goal;
         if (ui.selectedItemId !== null && !ui.items.some((item) => item.id === ui.selectedItemId)) {
           ui.selectedItemId = null;
         }
