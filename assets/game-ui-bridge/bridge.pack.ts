@@ -47,7 +47,15 @@ export const gameUiBridge: Plugin = {
     const countOf = (itemId: ItemId): number => inventory.count(itemId);
 
     // 目标进度服务由机械运行时稍后提供：按需读取，不做注入，避免打乱插件挂载顺序。
-    const readGoal = (): UiGoalState | null => buildGoalView(ctx.get('goalProgress')?.snapshot());
+    // 读取失败只影响订单面板（显示初始化态），绝不让 UI 故障打断机械/生产运行时。
+    const readGoal = (): UiGoalState | null => {
+      try {
+        return buildGoalView(ctx.get('goalProgress')?.snapshot());
+      } catch (error) {
+        console.error('M2.0: failed to read goal progress', error);
+        return null;
+      }
+    };
     const signatureWithGoal = (goal: UiGoalState | null): string =>
       stateSignature(definitions, countOf, hotbar.revision) + '|' + goalViewSignature(goal);
 
