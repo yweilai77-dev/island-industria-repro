@@ -146,11 +146,11 @@ export async function runSceneC(play, h, C) {
   await play.step('21-scene-c-install-and-split', async () => {
     let s = await state();
     const crusherId = machineOf(s, 'crush-iron-ore').partId;
-    const aId = partAt(s, -3, 8).partId;
-    const bId = partAt(s, -2, 8).partId;
+    const aId = partAt(s, -4, 9).partId;
+    const bId = partAt(s, -4, 10).partId;
     const cr = { gx: -4, gz: 8 };
-    const a = { gx: -3, gz: 8 };
-    const b = { gx: -2, gz: 8 };
+    const a = { gx: -4, gz: 9 };
+    const b = { gx: -4, gz: 10 };
 
     // 分流盒（K）装在上游输出位；两台下游各装一个基础输入盒（T）。
     await onPart(cr, crusherId, 'KeyK');
@@ -187,18 +187,18 @@ export async function runSceneC(play, h, C) {
     const movedB = linksTo(s, bId)[0].moved;
     assert(movedA === 3 && movedB === 3, 'round-robin must split 3 / 3, got ' + movedA + ' / ' + movedB);
     // 收走成品，避免产物缓冲满（4 格）阻塞下一段"目标不可用"测试。
-    await collectMachine({ gx: -3, gz: 8 }, aId, 1);
-    await collectMachine({ gx: -2, gz: 8 }, bId, 1);
+    await collectMachine({ gx: -4, gz: 9 }, aId, 1);
+    await collectMachine({ gx: -4, gz: 10 }, bId, 1);
     await play.screenshot('21-scene-c-split');
   });
 
   await play.step('22-scene-c-target-unavailable', async () => {
     let s = await state();
     const crusherId = machineOf(s, 'crush-iron-ore').partId;
-    const aId = partAt(s, -3, 8).partId;
-    const bId = partAt(s, -2, 8).partId;
+    const aId = partAt(s, -4, 9).partId;
+    const bId = partAt(s, -4, 10).partId;
     const cr = { gx: -4, gz: 8 };
-    const b = { gx: -2, gz: 8 };
+    const b = { gx: -4, gz: 10 };
     const aProduced = machineById(s, aId).producedTotal;
     const bProduced = machineById(s, bId).producedTotal;
 
