@@ -134,8 +134,9 @@ export async function runSceneA(play, h, C) {
     assert(s.links.length === 0, 'H must remove the material link');
 
     await feedByC(points['A-crusher'], 2);
-    await play.advance(6);
-    s = await state();
+    const crushedBefore = producedOf(s, 'crushed_ore');
+    const held = await waitFor((now) => producedOf(now, 'crushed_ore') >= crushedBefore + 2, 14, 'scene-d-held');
+    s = held.state;
     console.log('SCENE-D-HELD=' + JSON.stringify({
       produced: s.production.produced,
       smelter: machineById(s, smelterId),
