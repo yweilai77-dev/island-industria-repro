@@ -322,6 +322,14 @@ export function createCtx(play, h) {
     assert(s.ports.length === 0, 'teardown must return every interface box, got ' + s.ports.length);
   };
 
+  /** 截图前清掉选中高亮/放置幽灵，画面只保留真实机器、接口盒与物料连接。 */
+  const shot = async (name) => {
+    await play.keyboard.press('Escape');
+    await h.clearHover();
+    await play.advance(0.3);
+    await play.screenshot(name);
+  };
+
   const calibrate = async (label) => {
     // 相机是平滑跟随玩家的：刚走完路立刻标定会把"还在滑行"的相机当成稳态。
     await play.advance(0.8);
@@ -364,6 +372,7 @@ export function createCtx(play, h) {
     removePart,
     removeAllParts,
     calibrate,
+    shot,
     constants: {
       SHAFT, GEAR12, GEAR24, POWER, MACHINE, CHUTE, VDRIVE, FLY, CRUSHER, SMELTER, FORGE,
       ORE_TARGET_A, ORE_TARGET_B, ORE_NODE_A_VIEW, ORE_NODE_B_VIEW, BUILD_SPOT,

@@ -10,7 +10,7 @@ export async function runSceneB(play, h, C) {
   const {
     assert, points, state, producedOf, machineOf, machineById, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    feedMachine, collectMachine, waitFor, removeAllParts, calibrate,
+    feedMachine, collectMachine, waitFor, removeAllParts, calibrate, shot,
   } = C;
 
   await play.step('10-scene-b-merge-build', async () => {
@@ -26,7 +26,7 @@ export async function runSceneB(play, h, C) {
     }));
     assert(placed.parts.length === LAYOUT_B.length, 'scene B must place ' + LAYOUT_B.length + ' parts');
     assert(s.production.machines.length === 3, 'two crushers + one smelter must be tracked');
-    await play.screenshot('10-scene-b-built');
+    await shot('10-scene-b-built');
   });
 
   await play.step('11-scene-b-install-and-merge', async () => {
@@ -73,7 +73,7 @@ export async function runSceneB(play, h, C) {
     assert(producedOf(s, 'iron_ingot') >= 4, 'the merged material must be smelted');
     const moved = linksTo(s, smelterId).reduce((total, link) => total + link.moved, 0);
     assert(moved >= 4, 'the two links must each carry material (no overwrite, no loss)');
-    await play.screenshot('11-scene-b-merged');
+    await shot('11-scene-b-merged');
   });
 
   await play.step('12-scene-b-downstream-full', async () => {
@@ -113,12 +113,12 @@ export async function runSceneB(play, h, C) {
       + (movedAfter - movedBefore));
     assert(mergerBox.count === 4, 'the merger buffer must be full, which is what stops further transfer');
     assert(heldInPorts(s) + heldInMachines(s) >= 8, 'all blocked material must stay in buffers (nothing lost)');
-    await play.screenshot('12-scene-b-full');
+    await shot('12-scene-b-full');
   });
 
   await play.step('13-scene-b-teardown', async () => {
     await removeAllParts();
-    await play.screenshot('13-scene-b-teardown');
+    await shot('13-scene-b-teardown');
   });
 }
 
@@ -126,7 +126,7 @@ export async function runSceneC(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo, linksFrom,
     heldInPorts, heldInMachines, placeLayout, onPart, enableAllSources, feedByC,
-    feedMachine, collectMachine, waitFor, removeAllParts, calibrate,
+    feedMachine, collectMachine, waitFor, removeAllParts, calibrate, shot,
   } = C;
 
   await play.step('20-scene-c-split-build', async () => {
@@ -140,7 +140,7 @@ export async function runSceneC(play, h, C) {
       machines: ready.state.production.machines.map((m) => ({ id: m.partId, recipe: m.recipeId })),
     }));
     assert(placed.parts.length === LAYOUT_C.length, 'scene C must place ' + LAYOUT_C.length + ' parts');
-    await play.screenshot('20-scene-c-built');
+    await shot('20-scene-c-built');
   });
 
   await play.step('21-scene-c-install-and-split', async () => {
@@ -204,7 +204,7 @@ export async function runSceneC(play, h, C) {
     // 收走成品，避免产物缓冲满（4 格）阻塞下一段"目标不可用"测试。
     await collectMachine({ gx: -4, gz: 9 }, aId, 1);
     await collectMachine({ gx: -4, gz: 10 }, bId, 1);
-    await play.screenshot('21-scene-c-split');
+    await shot('21-scene-c-split');
   });
 
   await play.step('22-scene-c-target-unavailable', async () => {
@@ -240,12 +240,12 @@ export async function runSceneC(play, h, C) {
     await onPart(b, bId, 'KeyJ');
     s = await state();
     assert(linksFrom(s, crusherId).length === 2, 'relinking must restore the second branch');
-    await play.screenshot('22-scene-c-reconnected');
+    await shot('22-scene-c-reconnected');
   });
 
   await play.step('23-scene-c-teardown', async () => {
     await removeAllParts();
-    await play.screenshot('23-scene-c-teardown');
+    await shot('23-scene-c-teardown');
   });
 }
 
@@ -268,7 +268,7 @@ export async function runSceneF(play, h, C) {
       machines: s.production.machines.map((m) => ({ id: m.partId, recipe: m.recipeId })),
     }));
     assert(placed.parts.length === LAYOUT_F.length, 'scene F must place ' + LAYOUT_F.length + ' parts');
-    await play.screenshot('30-scene-f-built');
+    await shot('30-scene-f-built');
   });
 
   await play.step('31-scene-f-three-stage-production', async () => {
@@ -312,7 +312,7 @@ export async function runSceneF(play, h, C) {
     assert(producedOf(s, 'shaft') >= 1, 'the forge must consume ingots and produce a real machine part');
     assert(linksTo(s, smelterId)[0].moved >= 2, 'first link must carry crushed ore');
     assert(linksTo(s, forgeId)[0].moved >= 2, 'second link must carry ingots');
-    await play.screenshot('31-scene-f-production');
+    await shot('31-scene-f-production');
   });
 
   await play.step('32-scene-f-craft-output-box', async () => {
@@ -349,7 +349,7 @@ export async function runSceneF(play, h, C) {
     }));
     assert(countOf(s, 'output_interface_box') === boxBefore + 1,
       'the crafted output interface box must become a real inventory item');
-    await play.screenshot('32-scene-f-crafted-box');
+    await shot('32-scene-f-crafted-box');
   });
 
   await play.step('33-scene-f-teardown', async () => {
@@ -362,6 +362,6 @@ export async function runSceneF(play, h, C) {
       inventory: s.inventory.map((entry) => entry.itemId + ':' + entry.count),
       produced: s.production.produced,
     }));
-    await play.screenshot('33-scene-f-teardown');
+    await shot('33-scene-f-teardown');
   });
 }

@@ -6,7 +6,7 @@ export async function runSceneA(play, h, C) {
   const {
     assert, points, state, countOf, producedOf, machineOf, machineById, partOf, portsOf, linksTo,
     heldInPorts, heldInMachines, placeLayout, hoverPart, onPart, enableAllSources, feedByC,
-    feedMachine, collectMachine, takeByRightClick, waitFor, removeAllParts, calibrate, constants,
+    feedMachine, collectMachine, takeByRightClick, waitFor, removeAllParts, calibrate, shot, constants,
   } = C;
   const { SHAFT, ORE_TARGET_A, ORE_TARGET_B, ORE_NODE_A_VIEW, ORE_NODE_B_VIEW, BUILD_SPOT } = constants;
 
@@ -45,7 +45,7 @@ export async function runSceneA(play, h, C) {
     assert(ore >= afterA + ORE_TARGET_B - 1, 'harvesting node B must add iron ore');
 
     await walk(VIA_WEST, BUILD_SPOT);
-    await play.screenshot('01-harvested');
+    await shot('01-harvested');
   });
 
   await play.step('02-scene-a-build-line', async () => {
@@ -63,7 +63,7 @@ export async function runSceneA(play, h, C) {
     }));
     assert(s.parts.length === LAYOUT_A.length, 'scene A must place ' + LAYOUT_A.length + ' parts');
     assert(s.production.machines.length === 2, 'crusher + smelter must be tracked');
-    await play.screenshot('02-line-built');
+    await shot('02-line-built');
   });
 
   await play.step('03-scene-a-install-and-link', async () => {
@@ -116,7 +116,7 @@ export async function runSceneA(play, h, C) {
     assert(linksTo(s, smelterId)[0].moved >= 2, 'the link read projection must count the transferred items');
     // 收走铁锭，给后续场景留出成品缓冲（产物缓冲只有 4 格，收走后才能继续产出）。
     await collectMachine({ gx: -3, gz: 8 }, smelterId, 1);
-    await play.screenshot('03-scene-a-linked');
+    await shot('03-scene-a-linked');
   });
 
   await play.step('04-scene-d-disconnect-reconnect', async () => {
@@ -146,7 +146,7 @@ export async function runSceneA(play, h, C) {
     assert(machineById(s, smelterId).producedTotal === producedBefore,
       'without a link the downstream must not produce more');
     assert(heldInPorts(s) + heldInMachines(s) >= 2, 'material must be preserved in buffers after the link is cut');
-    await play.screenshot('04-scene-d-disconnected');
+    await shot('04-scene-d-disconnected');
 
     // 重新连接：物料继续流动。
     await onPart(cr, crusherId, 'KeyJ');
@@ -156,7 +156,7 @@ export async function runSceneA(play, h, C) {
     console.log('SCENE-D-RESUMED=' + JSON.stringify({ produced: s.production.produced, links: s.links }));
     assert(resumed.ok, 'reconnecting the link must resume automatic transfer');
     await takeByRightClick(points['A-smelter'], 1);
-    await play.screenshot('04-scene-d-reconnected');
+    await shot('04-scene-d-reconnected');
   });
 
   await play.step('05-scene-e-rotate-and-remove-port', async () => {
@@ -212,7 +212,7 @@ export async function runSceneA(play, h, C) {
     const parked = await waitFor((now) => producedOf(now, 'crushed_ore') >= crushedBefore + 2, 14, 'scene-e-parked');
     s = parked.state;
     assert(heldInPorts(s) + heldInMachines(s) >= 2, 'material must stay in buffers while the input port is missing');
-    await play.screenshot('05-scene-e-port-removed');
+    await shot('05-scene-e-port-removed');
 
     // 重新安装并重连：物流恢复。
     await onPart(sm, smelterId, 'KeyT');
@@ -227,7 +227,7 @@ export async function runSceneA(play, h, C) {
     console.log('SCENE-E-RECOVERED=' + JSON.stringify({ produced: s.production.produced, links: s.links }));
     assert(recovered.ok, 'after reinstalling the port and relinking, material must flow again');
     await takeByRightClick(points['A-smelter'], 1);
-    await play.screenshot('05-scene-e-recovered');
+    await shot('05-scene-e-recovered');
   });
 
   await play.step('06-scene-a-teardown', async () => {
@@ -239,6 +239,6 @@ export async function runSceneA(play, h, C) {
       ports: s.ports.length,
       inventory: s.inventory.map((entry) => entry.itemId + ':' + entry.count),
     }));
-    await play.screenshot('06-teardown');
+    await shot('06-teardown');
   });
 }
