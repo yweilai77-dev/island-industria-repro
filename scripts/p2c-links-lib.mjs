@@ -170,6 +170,11 @@ export function createCtx(play, h) {
         pt = await aim(item.cell);
       }
       points[item.label] = pt;
+      const before = await state();
+      const probe = await h.probeCell(pt);
+      console.log('AIM-CHECK ' + item.label + ' cell=' + JSON.stringify(item.cell)
+        + ' probe=' + JSON.stringify(probe) + ' player=' + JSON.stringify(before.player)
+        + ' cal=' + (calRef.value ? 'set' : 'unset'));
       await placeRotated(pt, item.slot, item.rot, item.label, item.cell);
     }
     await h.clearHover();
