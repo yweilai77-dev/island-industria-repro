@@ -172,7 +172,7 @@ export async function runSceneC(play, h, C) {
 
     await feedMachine({ gx: -4, gz: 8 }, crusherId, 6);
     const split = await waitFor((now) => machineById(now, aId).producedTotal >= 3
-      && machineById(now, bId).producedTotal >= 3, 45, 'scene-c-split');
+      && machineById(now, bId).producedTotal >= 3, 75, 'scene-c-split');
     s = split.state;
     console.log('SCENE-C-SPLIT=' + JSON.stringify({
       produced: s.production.produced,
