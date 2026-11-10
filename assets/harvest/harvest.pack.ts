@@ -288,6 +288,7 @@ export const ironHarvest: Plugin = {
                 if (input.keyboard.justPressedCode('KeyF')) {
                   startHarvest(state, target.id);
                   queuedHarvest = false;
+                  console.log('HARV-START node=' + target.id);
                   setRootVisible(promptRoot, false);
                 }
               } else {
@@ -332,7 +333,9 @@ export const ironHarvest: Plugin = {
                     }
                   }
                   // 排队的那一次立刻开始（仍需站在原地、节点仍有储量）。
+                  console.log('HARV-DONE node=' + nodeId + ' gained=' + String(result?.deducted) + ' remaining=' + String(result?.remaining));
                   if (queuedHarvest) {
+                    console.log('HARV-QUEUED-START');
                     queuedHarvest = false;
                     if (inRange && (result?.remaining ?? 0) > 0) startHarvest(state, nodeId);
                   }
