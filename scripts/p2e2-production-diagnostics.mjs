@@ -1,5 +1,4 @@
-// P2-E2/B 真实游戏验收：段1 player 能力未解锁 diagnostics=null；段2 legacy 真实三级产线
-// 制造缺料/缺动力/下游满载三种真实阻塞，断言诊断与唯一 GameRead 一致 + 批量配方产 2 件。
+// P2-E2/B：player 段验证 diagnostics=null 门控；legacy 段真实产线制造三种阻塞并断言诊断镜像。
 import { createHarness } from './m18-helpers.mjs';
 import { enterLegacyMode } from './legacy-mode.mjs';
 import { createCtx, LAYOUT_F } from './p2c-links-lib.mjs';
@@ -23,6 +22,19 @@ export default async function playthrough(play) {
   const { calibrate, placeLayout, enableAllSources, onPart, setSource, feedMachine,
     collectMachine, cycleRecipeAt, waitFor, shot } = C;
   const log = (label, payload) => console.log('P2E2B-' + label + '=' + JSON.stringify(payload));
+  /** 等游戏真正可读（reload/前端自刷新后不能立即 advance）。 */
+  const waitReadable = async (label = 'ready') => {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      try {
+        const s = await state();
+        if (s && Array.isArray(s.tech?.nodes) && s.tech.nodes.length > 0) return s;
+      } catch (error) {
+        // 页面正在 reload/启动：继续等。
+      }
+      try { await play.wait(150); } catch (error) { /* 导航中：继续轮询 */ }
+    }
+    throw new Error(label + ': game state not readable after reload');
+  };
   const diag = (s) => s.diagnostics ?? null;
   const cellOfPart = (s, partId) => {
     const part = s.parts.find((entry) => entry.partId === partId);
@@ -68,9 +80,6 @@ export default async function playthrough(play) {
     return d;
   };
 
-  // =========================================================================
-  // 段 1：player 正式模式 —— 能力未解锁时诊断必须为 null
-  // =========================================================================
   await play.step('00-player-diagnostics-locked', async () => {
     // 不注册 init script：默认就是 player 正式模式。
     // 先用真实 UI 的「清空存档并重开」清掉默认存档槽（避免自动读档把旧世界带进本次验收），
@@ -78,7 +87,6 @@ export default async function playthrough(play) {
     await play.reload();
     await play.advance(0.8);
     await play.keyboard.press('Tab');
-    await play.advance(0.2);
     await play.wait(250);
     const cleared = await play.page.evaluate(() => {
       const button = document.querySelector('[data-ii-action="save-new"]');
@@ -87,20 +95,28 @@ export default async function playthrough(play) {
       return true;
     });
     if (cleared) {
-      await play.wait(500);
+      // 「清空存档并重开」会触发前端 location.reload()：此时不能 advance，
+      // 只做 wait + 显式 reload（幂等）+ 轮询 state 直到 tech 可读。
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          await play.wait(600);
+          await play.reload();
+          break;
+        } catch (error) {
+          try { await play.wait(600); } catch (ignored) { /* 导航中 */ }
+        }
+      }
+    } else {
       await play.keyboard.press('Escape');
       await play.advance(0.2);
-      await play.reload();
-      await play.advance(0.8);
     }
-    let s = await state();
+    let s = await waitReadable('player-boot');
     assert(s.tech?.mode === 'player', 'expected player progression mode');
     assert(s.diagnostics === null, 'diagnostics must be null while line-diagnostics is locked (not an empty array)');
     const node = (id) => s.tech.nodes.find((entry) => entry.id === id);
     assert(node('tech:batch-processing')?.status === 'locked', 'T3.1 must be locked in player mode');
     assert(node('tech:line-integration')?.status === 'locked', 'T3.2 must be locked in player mode');
     assert(node('tech:gear-manufacture')?.status === 'available', 'T1.1 must start available');
-    log('00-PLAYER-LOCKED', { mode: s.tech.mode, diagnostics: s.diagnostics });
 
     // 锻压机可见配方数：player 模式下只有开局基础配方。
     await h.learnMovement();
@@ -113,13 +129,9 @@ export default async function playthrough(play) {
     assert(forge !== undefined, 'player forge missing');
     assert(forge.recipeCount === 1, 'player forge must expose 1 recipe, got ' + forge.recipeCount);
     assert(s.diagnostics === null, 'diagnostics must stay null with machines present but capability locked');
-    log('00-PLAYER-RECIPES', { recipes: forge.recipeCount, recipeId: forge.recipeId });
     await shot('00-player-diagnostics-locked');
   });
 
-  // =========================================================================
-  // 段 2：legacy 兼容模式 —— 真实产线 + 真实阻塞 + 批量多件产出
-  // =========================================================================
   await play.step('01-legacy-diagnostics-unlocked', async () => {
     // 复用仓库内已被 19 个旧脚本验证过的 helper：它只注册一个 init script（legacy flags+reload+
     // 轮询 tech.mode 与 16 项套件精确相等）。我们额外传隔离 saveStorageKey，避免跨 run 自动读档污染。
@@ -315,7 +327,6 @@ export default async function playthrough(play) {
     assert(d.hasError === true, 'downstream saturation is an error-level state');
     assert(d.bottleneck !== null && ['output', 'logistics'].includes(d.bottleneck.kind),
       'bottleneck must describe the downstream blockage, got ' + JSON.stringify(d.bottleneck));
-    log('09-DOWNSTREAM-FULL', { bottleneck: d.bottleneck.kind, fullBox: fullBox.partId, summary: d.summary });
     await shot('09-diagnostics-downstream-full');
 
     // 恢复动力并取走产物 → 阻塞必须自行解除（不丢料）。
@@ -343,7 +354,6 @@ export default async function playthrough(play) {
     const s = await state();
     const d = assertDiagnosticsMirror(s, 'final');
     assert(d.unlocked === true, 'diagnostics snapshot must declare unlocked=true once visible');
-    log('10-FINAL', { hasError: d.hasError, summary: d.summary, blocks: d.machines.map((m) => m.block), links: d.links.length });
     await shot('10-final');
   });
 }
