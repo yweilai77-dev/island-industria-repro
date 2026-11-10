@@ -14,17 +14,20 @@ export async function runPhaseB({ play, kit, helpers, saved }) {
   await play.step('05-reload-and-restore', async () => {
     await play.reload();
     await play.advance(0.6);
-    // 启动自动恢复：等真实世界回到存档状态；超时则用显式 restore 兜底一次。
+    // 引擎侧已删除隐式自动读档：isolated 分档下显式发 save/restore，
+    // 不再假设「reload 后会自动恢复」。失败再重试一次显式恢复（CDP 偶发丢事件）。
+    const predicate = (st) => st.parts.length === saved.parts.length
+      && st.tech?.unlocked.includes(NODE_GEAR) === true;
+    await waitForSaveUi();
     let restored = null;
     try {
-      restored = await waitRestored('auto restore after reload', (st) => st.parts.length === saved.parts.length
-        && st.tech?.unlocked.includes(NODE_GEAR) === true, 15000);
+      await triggerRestore();
+      restored = await waitRestored('explicit restore after reload', predicate, 30000);
     } catch (error) {
-      console.log('P2E3-RESTORE-FALLBACK ' + String(error && error.message));
+      console.log('P2E3-RESTORE-RETRY ' + String(error && error.message));
       await waitForSaveUi();
       await triggerRestore();
-      restored = await waitRestored('explicit restore', (st) => st.parts.length === saved.parts.length
-        && st.tech?.unlocked.includes(NODE_GEAR) === true, 30000);
+      restored = await waitRestored('explicit restore retry', predicate, 30000);
     }
     const stillSaved = parseSave(await readRawSave());
     assert(stillSaved.parts.length === saved.parts.length, 'save must survive the reload unchanged');

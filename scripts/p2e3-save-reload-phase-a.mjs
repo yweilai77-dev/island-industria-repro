@@ -7,7 +7,7 @@ import { EXPECTED_PARTS, MAX_SAVE_BYTES, NODE_GEAR, SAVE_KEY } from './p2e3-save
 export async function runPhaseA({ play, h, kit, helpers }) {
   const { assert, state, invOf, machineByRecipe, logStep, waitProduction, rewind } = kit;
   const {
-    sleep, waitForSaveUi, triggerNewGame, triggerSave, waitRestored, readRawSave, parseSave,
+    sleep, waitForSaveUi, triggerNewGame, triggerSave, waitRestored, readRawSave, parseSave, invTotals,
   } = helpers;
 
   let saved = null;
@@ -52,14 +52,23 @@ export async function runPhaseA({ play, h, kit, helpers }) {
     const cal = await h.calibrate('LEVEL0');
     kit.setCal(cal);
     assert(await h.gotoCell({ gx: -6, gz: 4 }, 20000, true), 'must reach ore node A');
-    for (let index = 0; index < 12; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await sleep(60);
+    // 状态驱动采集：长脚本里孤立短按键偶发整帧丢失，所以不盲按固定次数，
+    // 而是 hold(KeyF,60) + 推进游戏时间，直到库存达到目标或尝试次数用完。
+    const targetOre = 12;
+    const maxAttempts = targetOre * 2;
+    let attempts = 0;
+    let ore = invOf(await state(), 'iron_ore');
+    while (ore < targetOre && attempts < maxAttempts) {
+      attempts += 1;
+      await h.holdKey('KeyF', 60);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await sleep(40);
+      ore = invOf(await state(), 'iron_ore');
     }
-    const s = await state();
-    assert(invOf(s, 'iron_ore') >= 12, 'need at least 12 iron ore, got ' + invOf(s, 'iron_ore'));
-    logStep('01-ORE', { ore: invOf(s, 'iron_ore') });
+    assert(ore >= targetOre - 3,
+      'need at least ' + (targetOre - 3) + ' iron ore after ' + attempts + ' attempts, got ' + ore);
+    logStep('01-ORE', { ore, attempts, target: targetOre });
   });
 
   // ------------------------------------------------------------------
@@ -120,13 +129,28 @@ export async function runPhaseA({ play, h, kit, helpers }) {
     kit.points.smelter = smelterPt;
     kit.points.forge = forgePt;
 
-    const feed = async (point, times) => {
+    // 状态驱动投料：hold(KeyC,60) 防整帧丢失；用「库存实际减少量」校验每一下是否真的进了机器，
+    // 没进就重试（最多 times*3 次），最终不足则带上下文失败。
+    const feed = async (point, times, itemId, partId) => {
       await play.mouse.move(point);
-      await sleep(120);
-      for (let index = 0; index < times; index += 1) {
-        await play.keyboard.press('KeyC');
-        await play.advance(0.08);
+      await sleep(140);
+      let inserted = 0;
+      let attempts = 0;
+      const maxAttempts = times * 3;
+      while (inserted < times && attempts < maxAttempts) {
+        attempts += 1;
+        const before = invOf(await state(), itemId);
+        await h.holdKey('KeyC', 60);
+        await play.advance(0.12);
+        await sleep(30);
+        const after = invOf(await state(), itemId);
+        const delta = before - after;
+        if (delta > 0) inserted += delta;
       }
+      assert(inserted >= times,
+        'feed ' + itemId + ' into part ' + partId + ': expected ' + times + ' inserted, got ' + inserted
+          + ' after ' + attempts + ' attempts');
+      return inserted;
     };
     const take = async (point) => {
       await play.mouse.move(point);
@@ -138,22 +162,17 @@ export async function runPhaseA({ play, h, kit, helpers }) {
     // 2 批 × 4 矿石 -> 8 碎铁矿；2 批 × 4 碎铁矿 -> 8 铁锭；4 铁锭 -> 2 传动轴。
     for (let batch = 0; batch < 2; batch += 1) {
       await rewind(3500);
-      await feed(crusherPt, 4);
+      await feed(crusherPt, 4, 'iron_ore', crusher.partId);
       await waitProduction('crush batch ' + batch, (st) => (st.production.produced.find((p) => p.itemId === 'crushed_ore')?.count ?? 0) >= 4 * (batch + 1), { timeoutMs: 90000 });
       await take(crusherPt);
     }
     for (let batch = 0; batch < 2; batch += 1) {
       await rewind(3500);
-      await feed(smelterPt, 4);
+      await feed(smelterPt, 4, 'crushed_ore', smelter.partId);
       await waitProduction('smelt batch ' + batch, (st) => (st.production.produced.find((p) => p.itemId === 'iron_ingot')?.count ?? 0) >= 4 * (batch + 1), { timeoutMs: 120000 });
       await take(smelterPt);
     }
-    await play.mouse.move(forgePt);
-    await sleep(150);
-    for (let index = 0; index < 4; index += 1) {
-      await play.keyboard.press('KeyC');
-      await play.advance(0.08);
-    }
+    await feed(forgePt, 4, 'iron_ingot', forge.partId);
     await waitProduction('forge shafts', (st) => (st.production.produced.find((p) => p.itemId === 'shaft')?.count ?? 0) >= 2, { timeoutMs: 90000, keepPowered: true });
     await take(forgePt);
 

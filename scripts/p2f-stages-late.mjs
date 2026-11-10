@@ -11,6 +11,20 @@ export async function runLateStages(play, F, saveKey) {
     submitTech, nodeOf, nodeStatus, beginProof, crusherIdOf, cellOfMachine, producedCount,
     switchForgeRecipe, forgeIdOf, kit } = F;
 
+  /** 等游戏真正可读（reload 后不能马上 advance/断言）。 */
+  const waitReadable = async (label = 'ready') => {
+    for (let attempt = 0; attempt < 150; attempt += 1) {
+      try {
+        const s = await play.state('mechanical');
+        if (s && Array.isArray(s.tech?.nodes) && s.tech.nodes.length === 12) return s;
+      } catch (error) {
+        // 启动/读档中：继续等。
+      }
+      await play.wait(150);
+    }
+    throw new Error(label + ': game state not readable after reload');
+  };
+
   await play.step('30-t31-batch-processing', async () => {
     await ensureDelivery(TECH_NODES.T31);
     await submitTech(TECH_NODES.T31);
@@ -163,20 +177,12 @@ export async function runLateStages(play, F, saveKey) {
     log('35-SAVED', { key: saveKey, bytes: stored.length, status });
     await play.keyboard.press('Escape');
     await play.advance(0.2);
-    // 重载页面 → 前端自动读档 → 世界/科技/终局全部恢复。
+    // 重载页面 → 先轮询到 state 可读（不 advance），再等自动读档恢复到终局完成态。
     await play.reload();
-    let restored = null;
-    for (let attempt = 0; attempt < 80; attempt += 1) {
-      await play.advance(0.5);
-      try {
-        const now = await state();
-        if (now.tech?.nodes?.length === 12 && now.tech.unlocked.includes(TECH_NODES.T33)) { restored = now; break; }
-      } catch (error) {
-        // 启动/读档中的瞬时不可读：继续等。
-      }
-    }
-    assert(restored !== null, 'reloaded page must auto-restore the save');
-    s = await F.waitForState('restore settled', (now) => now.project.completed === true, 20);
+    const readable = await waitReadable('reload');
+    assert(readable.tech.mode === 'player', 'reloaded page must still be player mode');
+    s = await F.waitForState('restore settled',
+      (now) => now.project.completed === true && now.tech.unlocked.includes(TECH_NODES.T33), 30);
     const after = {
       inventory: s.inventory.map((entry) => entry.itemId + ':' + entry.count).sort(),
       parts: s.parts.length,

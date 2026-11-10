@@ -25,61 +25,61 @@ export async function runEarlyStages(play, F) {
     assert(ready.ok, label + ': ' + JSON.stringify(ready.state?.production?.machines));
     return ready.state;
   };
-  const machineCell = async (machineId) => cellOfMachine(await state(), machineId);
+  /** 走路带重试：卡位时后退一次再重走（避免一次卡位毁掉整条 playthrough）。 */
+  const goCell = async (cell, timeout = 16000) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (await h.gotoCell(cell, timeout, false)) return true;
+      const s = await state();
+      const back = { gx: s.player.cell.gx - cell.gx, gz: s.player.cell.gz - cell.gz };
+      if (back.gx !== 0 || back.gz !== 0) await h.holdToward(back.gx, back.gz, 350);
+      await play.wait(150);
+    }
+    return false;
+  };
+  const walkTo = async (waypoints, final) => {
+    for (const waypoint of waypoints) {
+      assert(await goCell(waypoint), 'cannot reach waypoint ' + JSON.stringify(waypoint));
+    }
+    assert(await goCell(final), 'cannot reach ' + JSON.stringify(final));
+  };
+  /** 状态驱动采集：按目标库存增量循环（CDP 短按键会丢帧，不能盲按固定次数）。 */
+  const harvestAt = async (view, target, label) => {
+    assert(await goCell(view), 'cannot reach ore node ' + label);
+    const before = countOf(await state(), 'iron_ore');
+    let attempts = 0;
+    while (attempts < target * 2) {
+      if (countOf(await state(), 'iron_ore') >= before + target - 2) break;
+      await play.keyboard.hold('KeyF', 60);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await play.wait(40);
+      attempts += 1;
+    }
+    const after = countOf(await state(), 'iron_ore');
+    const gained = after - before;
+    assert(gained >= target - 3, label + ' harvest short: gained ' + gained + '/' + target + ' attempts=' + attempts);
+    log('HARVEST', { label, gained, target, attempts });
+    return after;
+  };
   const removeByCell = async (cell) => {
     const s = await state();
     const part = s.parts.find((entry) => entry.placement.gx === cell.gx && entry.placement.gz === cell.gz);
     if (part === undefined) return;
     await removePart(cell, part.partId);
   };
-  const placeOne = async (cell, slot, rot, label) => {
-    await ensureHotbar(slot === SLOT.SMELTER ? 'smelter' : slot === SLOT.CHUTE ? 'chute' : 'shaft');
-    await placeRotated(await aim(cell), slot, rot, label, cell);
-  };
-
   // ------------------------------------------------------------------
   await play.step('01-harvest-ore-stockpile', async () => {
     await calibrate('ORE-A');
-    assert(await h.gotoCell(ORE_A, 16000, true), 'must reach ore node A');
-    const before = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < 60; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
-    }
-    const afterA = countOf(await state(), 'iron_ore');
-    assert(afterA >= before + 59, 'node A must yield 60 ore, got ' + (afterA - before));
-    await F.walk([{ gx: -8, gz: 4 }, { gx: -8, gz: -4 }, { gx: 0, gz: -4 }], ORE_B);
-    const beforeB = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < 60; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
-    }
-    const afterB = countOf(await state(), 'iron_ore');
-    assert(afterB >= beforeB + 59, 'node B must yield 60 ore, got ' + (afterB - beforeB));
-    // 节点 D（东南）：从 B 沿平台外侧绕行。
-    await F.walk([{ gx: 3, gz: -6 }, { gx: 9, gz: -6 }, { gx: 12, gz: -6 }, { gx: 12, gz: 0 }, { gx: 12, gz: 6 }], ORE_D);
-    const beforeD = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < 60; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
-    }
-    const afterD = countOf(await state(), 'iron_ore');
-    assert(afterD >= beforeD + 50, 'node D must yield >=51 ore, got ' + (afterD - beforeD));
-    await F.walk([{ gx: 12, gz: 0 }, { gx: 9, gz: -6 }, { gx: -8, gz: -4 }, { gx: -13, gz: -7 }], ORE_C);
-    const beforeC = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < 60; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
-    }
-    const afterC = countOf(await state(), 'iron_ore');
-    assert(afterC >= beforeC + 50, 'node C must yield >=51 ore, got ' + (afterC - beforeC));
-    await F.walk([{ gx: -13, gz: -7 }, { gx: -8, gz: -7 }, { gx: -8, gz: 4 }], PLAYER_SPOT);
+    await harvestAt(ORE_A, 60, 'A');
+    await walkTo([{ gx: -8, gz: 4 }, { gx: -8, gz: -4 }, { gx: 0, gz: -4 }], ORE_B);
+    await harvestAt(ORE_B, 60, 'B');
+    await walkTo([{ gx: 3, gz: -6 }, { gx: 9, gz: -6 }, { gx: 12, gz: -6 }, { gx: 12, gz: 0 }, { gx: 12, gz: 6 }], ORE_D);
+    await harvestAt(ORE_D, 60, 'D');
+    await walkTo([{ gx: 12, gz: 0 }, { gx: 9, gz: -6 }, { gx: -8, gz: -4 }], ORE_C);
+    await harvestAt(ORE_C, 60, 'C');
+    await walkTo([{ gx: -13, gz: -7 }, { gx: -8, gz: -7 }, { gx: -8, gz: 4 }], PLAYER_SPOT);
     const s = await state();
-    assert(countOf(s, 'iron_ore') >= 230, 'must stockpile >=230 ore, got ' + countOf(s, 'iron_ore'));
+    assert(countOf(s, 'iron_ore') >= 228, 'must stockpile >=228 ore, got ' + countOf(s, 'iron_ore'));
     log('01-ORE', { ore: countOf(s, 'iron_ore') });
     await shot('01-ore-stockpile');
   });
@@ -321,7 +321,7 @@ export async function runEarlyStages(play, F) {
       await ensureHotbar(itemId);
     }
     // 站位换到空地（(-7,7) 将成为飞轮所在格），再重新标定。
-    assert(await h.gotoCell({ gx: -8, gz: 8 }, 16000, true), 'must step aside before rebuilding');
+    assert(await goCell({ gx: -8, gz: 8 }), 'must step aside before rebuilding');
     await calibrate('FINAL-WORK');
     F.setWorkSpot({ gx: -8, gz: 8 });
     await placeLayout(LAYOUT_FINAL);

@@ -381,7 +381,15 @@ export function createP2f(play, h) {
     placeRotated: wrapAfterCalibration('placeRotated', 'PLACE'),
     placeLayout: wrapAfterCalibration('placeLayout', 'LAYOUT'),
     onPart: wrapAfterCalibration('onPart', 'ONPART'),
-    feedMachine: wrapAfterCalibration('feedMachine', 'FEED'),
+    feedMachine: async (cell, partId, times) => {
+      await calibrateIfMoved('FEED');
+      await C.feedMachine(cell, partId, 0);
+      for (let index = 0; index < times; index += 1) {
+        await play.keyboard.hold('KeyC', 60);
+        await play.advance(0.12);
+      }
+      return state();
+    },
     collectMachine: wrapAfterCalibration('collectMachine', 'COLLECT'),
     removePart: wrapAfterCalibration('removePart', 'REMOVE'),
     placeFrameAt: wrapAfterCalibration('placeFrameAt', 'FRAME'),
