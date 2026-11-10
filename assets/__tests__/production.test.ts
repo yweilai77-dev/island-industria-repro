@@ -160,7 +160,8 @@ describe('M1.8-C machine state machine', () => {
   it('cycles the forge recipe only when the cycle has not consumed input', () => {
     // P2-C/P2-D：锻压机新增输出/分流/合流盒、三种核心复制配方与结构框架，列表 4 → 11；
     // 既有 4 条顺序保持不变（历史验收脚本按这个顺序记 R 的按法）。
-    expect(MACHINE_RECIPES.forge).toHaveLength(11);
+    // P2-E1：科技解锁配方追加在末尾（历史 11 条顺序与下标不变），列表 11 → 17。
+    expect(MACHINE_RECIPES.forge).toHaveLength(17);
     expect(MACHINE_RECIPES.forge?.map((recipe) => recipe.id)).toEqual([
       'forge-shaft',
       'forge-vertical-drive',
@@ -173,6 +174,12 @@ describe('M1.8-C machine state machine', () => {
       'forge-smelter',
       'forge-processing-core',
       'forge-structure-frame',
+      'forge-gear-12',
+      'forge-gear-24',
+      'forge-flywheel',
+      'forge-batch-shaft',
+      'forge-batch-interface-box',
+      'forge-batch-structure-frame',
     ]);
     const state = createMachineState(1);
     expect(activeRecipe(state, FORGE)?.id).toBe(FORGE_SHAFT_RECIPE.id);

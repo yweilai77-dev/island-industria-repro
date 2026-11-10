@@ -87,6 +87,13 @@ describe('工业数据 ↔ 现有配方', () => {
       'forge-smelter',
       'forge-processing-core',
       'forge-structure-frame',
+      // P2-E1：科技解锁配方追加在末尾（历史 11 条顺序与下标不变）。
+      'forge-gear-12',
+      'forge-gear-24',
+      'forge-flywheel',
+      'forge-batch-shaft',
+      'forge-batch-interface-box',
+      'forge-batch-structure-frame',
     ]);
   });
 

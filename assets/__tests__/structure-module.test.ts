@@ -66,8 +66,15 @@ describe('结构模块静态定义', () => {
       'forge-smelter',
       'forge-processing-core',
       'forge-structure-frame',
+      // P2-E1：科技解锁配方追加在末尾。
+      'forge-gear-12',
+      'forge-gear-24',
+      'forge-flywheel',
+      'forge-batch-shaft',
+      'forge-batch-interface-box',
+      'forge-batch-structure-frame',
     ]);
-    const recipe = recipes[recipes.length - 1];
+    const recipe = recipes.find((entry) => entry.id === 'forge-structure-frame');
     expect(recipe?.inputs).toEqual([{ itemId: 'iron_ingot', count: 3 }]);
     expect(recipe?.outputs).toEqual([{ itemId: 'structure_frame', count: 1 }]);
     expect(recipe?.seconds).toBe(5);

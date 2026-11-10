@@ -127,8 +127,15 @@ describe('工业目录：索引可反查', () => {
   it('配方索引覆盖现有全部配方，且能从核心反查', () => {
     expect(INDUSTRIAL_CATALOG.recipes.map((recipe) => recipe.id)).toEqual([
       'crush-iron-ore',
+      // P2-E1：科技解锁的 6 条配方（全部追加，既有 13 条不变）。
+      'forge-batch-interface-box',
+      'forge-batch-shaft',
+      'forge-batch-structure-frame',
       'forge-chute',
       'forge-crusher',
+      'forge-flywheel',
+      'forge-gear-12',
+      'forge-gear-24',
       'forge-interface-box',
       'forge-merger-box',
       'forge-output-box',
