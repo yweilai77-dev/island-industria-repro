@@ -8,7 +8,7 @@ const LEGACY_SAVE_KEY = 'p2e2/legacy-diag/' + Date.now();
 const PLAYER_FORGE_CELL = { gx: -4, gz: 9 };
 const WORK_CELL = { gx: -6, gz: 6 };
 const ORE_VIEW = { gx: -6, gz: 4 };
-const ORE_COUNT = 24;
+const ORE_COUNT = 44;
 const BUILD_SPOT = { gx: -6, gz: 7 };
 const CRUSHER_CELL = { gx: -4, gz: 8 };
 const SMELTER_CELL = { gx: -3, gz: 8 };
@@ -148,13 +148,16 @@ export default async function playthrough(play) {
     await calibrate('LEGACY-ORE');
     assert(await h.gotoCell(ORE_VIEW, 16000, true), 'must reach iron ore node A');
     const before = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < ORE_COUNT; index += 1) {
+    // 采集偶发丢 1 次：按「目标库存」循环补齐，而不是盲按固定次数。
+    for (let guard = 0; guard < ORE_COUNT + 12; guard += 1) {
+      if (countOf(await state(), 'iron_ore') >= before + ORE_COUNT) break;
       await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(60);
+      await play.advance(3.2);
+      await play.wait(80);
     }
     const s = await state();
-    assert(countOf(s, 'iron_ore') >= before + ORE_COUNT - 2, 'harvest short');
+    assert(countOf(s, 'iron_ore') >= before + ORE_COUNT - 2,
+      'harvest short: got ' + (countOf(s, 'iron_ore') - before) + '/' + ORE_COUNT);
   });
 
   await play.step('03-build-three-stage-line', async () => {
@@ -254,7 +257,6 @@ export default async function playthrough(play) {
     const d = assertDiagnosticsMirror(s, 'chain');
     assert(d.links.every((link) => link.severity === 'ok'), 'both links must report ok while delivering material');
     assert(d.machines.some((machine) => machine.severity === 'ok'), 'at least one machine must be reported as healthy');
-    log('06-LINKED', { moved: s.links.map((l) => l.moved), ok: d.links.map((l) => l.severity) });
     await shot('06-linked-diagnostics-empty');
   });
 
@@ -270,7 +272,7 @@ export default async function playthrough(play) {
     assert(starving.length === d.machines.length, 'every machine must report no-input');
     assert(d.hasError === true, 'no-input is an error-level diagnostic');
     assert(d.bottleneck?.kind === 'supply', 'bottleneck must be supply when everything lacks material, got ' + JSON.stringify(d.bottleneck));
-    assert(d.bottleneck?.partId === crusherId, 'the most upstream machine must be the bottleneck');
+    assert(d.bottleneck?.partId === crusherId, 'bottleneck must be the upstream crusher');
     assert(starving[0].message.includes('缺原料'), 'Chinese message must explain the missing input: ' + starving[0].message);
     await shot('07-diagnostics-no-input');
   });
@@ -286,7 +288,6 @@ export default async function playthrough(play) {
     assert(d.summary.powered === 0, 'summary.powered must be 0');
     assert(d.bottleneck?.kind === 'power', 'bottleneck must be power, got ' + JSON.stringify(d.bottleneck));
     assert(d.machines.every((m) => (m.conditions ?? []).find((c) => c.id === 'power')?.ok === false), 'power condition must be false');
-    log('08-NO-POWER', { bottleneck: d.bottleneck, summary: d.summary });
     await shot('08-diagnostics-no-power');
     await setAllSources(true);
     await play.advance(0.6);
@@ -346,7 +347,6 @@ export default async function playthrough(play) {
     const after = assertDiagnosticsMirror(recovered, 'recovered');
     assert(after.bottleneck === null || after.bottleneck.kind === 'supply',
       'after recovery the only remaining bottleneck may be supply, got ' + JSON.stringify(after.bottleneck));
-    log('09-RECOVERED', { bottleneck: after.bottleneck, summary: after.summary });
     await shot('09-diagnostics-recovered');
   });
 
