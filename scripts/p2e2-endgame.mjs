@@ -11,6 +11,7 @@
 // 科技交付通过 __II_TEST_TECH__ 发送与正式 UI 相同的 tech/submit-all 命令（不绕过校验）。
 import { createHarness } from './m18-helpers.mjs';
 import { createOrderKit } from './m20-order-lib.mjs';
+import { createHarvest } from './p2e2-endgame-harvest.mjs';
 import {
   FACTORY_CELLS,
   FACTORY_FRAMES,
@@ -38,8 +39,9 @@ const T3_1 = 'tech:batch-processing';
 const T3_2 = 'tech:line-integration';
 const T3_3 = 'tech:combined-works';
 
-const ORE_TARGET = 165;
 const INGOT_TARGET = 156;
+/** 生产 156 铁锭 + 4 块碎矿 = 160 矿石；再留 ~15 给运行证明窗口喂料（见 harvest 模块）。 */
+const ORE_REQUIRED = 175;
 
 /** 终局成套交付（与节点成本一致；交付后库存精确减少这些数量）。 */
 const DELIVERY_ITEMS = [
@@ -58,6 +60,7 @@ export default async function playthrough(play) {
   const kit = createOrderKit(play, h);
   const E = createEndgameCtx(play, h);
   const { assert, state, invOf, techNode, projectOf, machineAt, logStep, waitState, summarize } = E;
+  const harvest = createHarvest({ play, h, state, invOf, logStep, assert });
   const cells = { ...FACTORY_CELLS };
   let proofGuard = null; // { fw1Id, fw2Id }：工厂飞轮的真实 partId
 
@@ -67,6 +70,7 @@ export default async function playthrough(play) {
     for (const waypoint of waypoints) await h.gotoCell(waypoint, 14000, false);
     assert(await h.gotoCell(cell, 14000, true), 'must reach cell ' + JSON.stringify(cell));
   };
+
 
   const flywheelParts = (s) => s.parts.filter((part) => part.kind === 'power-source');
   const flywheelAt = (s, cell) => flywheelParts(s).find((part) => part.placement.gx === cell.gx
@@ -93,17 +97,9 @@ export default async function playthrough(play) {
 
   await play.step('01-harvest-ore', async () => {
     await h.learnMovement();
-    assert(await h.gotoCell(PRODUCTION_CELLS.ore, 24000, true), 'must reach iron ore node');
-    const before = invOf(await state(), 'iron_ore');
-    for (let index = 0; index < ORE_TARGET; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
-    }
-    const after = await state();
-    const ore = invOf(after, 'iron_ore');
-    assert(ore >= before + ORE_TARGET - 3, 'harvest must yield ~' + ORE_TARGET + ' ore, got ' + (ore - before));
-    assert(await h.gotoCell(PRODUCTION_CELLS.buildSpot, 24000, true), 'must walk back to build spot');
+    // 跨矿点采集 A→B→C（P2-E3 平衡后每点储量 60，单点挖空即 depleted）。
+    const ore = await harvest.harvestAll(PRODUCTION_CELLS.buildSpot);
+    assert(ore >= ORE_REQUIRED, 'harvest must stockpile >= ' + ORE_REQUIRED + ' ore, got ' + ore);
     logStep('ORE', { ore });
   });
 

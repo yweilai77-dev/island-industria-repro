@@ -1,10 +1,6 @@
-// M2.0-P2-E2 工作包 B 真实游戏验收：生产线诊断（T3.2 line-diagnostics）。
-//
-// 两段式：段 1 player——能力未解锁 diagnostics 必须 null；段 2 legacy——真实三级产线
-// （含 MaterialLink/接口盒）制造缺料/缺动力/下游满载三种真实阻塞，断言诊断与唯一
-// GameRead 一致，并用批量配方真实产出 2 件。真实爬 T1.1→T3.2 由工作包 F 覆盖。
+// P2-E2/B 真实游戏验收：段1 player 能力未解锁 diagnostics=null；段2 legacy 真实三级产线
+// 制造缺料/缺动力/下游满载三种真实阻塞，断言诊断与唯一 GameRead 一致 + 批量配方产 2 件。
 import { createHarness } from './m18-helpers.mjs';
-import { enterLegacyMode } from './legacy-mode.mjs';
 import { createCtx, LAYOUT_F } from './p2c-links-lib.mjs';
 import { FORGE } from './m20-order-lib.mjs';
 
@@ -21,9 +17,9 @@ const FORGE_CELL = { gx: -3, gz: 7 };
 export default async function playthrough(play) {
   const h = createHarness(play);
   const C = createCtx(play, h);
-  const { assert, state, countOf, producedOf, machineOf, machineById, portsOf, linksTo } = C;
+  const { assert, state, countOf, producedOf, machineOf, machineById, portsOf } = C;
   const { calibrate, placeLayout, enableAllSources, onPart, setSource, feedMachine,
-    collectMachine, cycleRecipeAt, waitFor, shot, points } = C;
+    collectMachine, cycleRecipeAt, waitFor, shot } = C;
   const log = (label, payload) => console.log('P2E2B-' + label + '=' + JSON.stringify(payload));
   const diag = (s) => s.diagnostics ?? null;
   const cellOfPart = (s, partId) => {
@@ -73,10 +69,16 @@ export default async function playthrough(play) {
   // =========================================================================
   // 段 1：player 正式模式 —— 能力未解锁时诊断必须为 null
   // =========================================================================
+  // 只注册一个 init script：模式从 localStorage 标记读取。
+  // 多个 addInitScript 会互相覆盖（player/legacy 之争曾让 legacy 段整套被跳过），
+  // 因此用持久标记驱动，reload 前后都只有一个标志来源。
+  await play.page.addInitScript(() => {
+    const mode = globalThis.localStorage.getItem('p2e2/run-mode') === 'legacy' ? 'legacy' : 'player';
+    globalThis.__II_TEST_FLAGS__ = { progression: mode };
+  });
+
   await play.step('00-player-diagnostics-locked', async () => {
-    await play.page.addInitScript(() => {
-      globalThis.__II_TEST_FLAGS__ = { progression: 'player' };
-    });
+    await play.page.evaluate(() => globalThis.localStorage.removeItem('p2e2/run-mode'));
     await play.reload();
     await play.advance(0.8);
     let s = await state();
@@ -97,7 +99,7 @@ export default async function playthrough(play) {
     s = await state();
     const forge = s.production.machines.find((entry) => entry.recipeId === 'forge-shaft');
     assert(forge !== undefined, 'player forge must exist and default to forge-shaft');
-    assert(forge.recipeCount === 1, 'player forge must expose only 1 recipe before tech unlocks, got ' + forge.recipeCount);
+    assert(forge.recipeCount === 1, 'player forge must expose 1 recipe, got ' + forge.recipeCount);
     assert(s.diagnostics === null, 'diagnostics must stay null with machines present but capability locked');
     log('00-PLAYER-RECIPES', { recipes: forge.recipeCount, recipeId: forge.recipeId });
     await shot('00-player-diagnostics-locked');
@@ -107,14 +109,29 @@ export default async function playthrough(play) {
   // 段 2：legacy 兼容模式 —— 真实产线 + 真实阻塞 + 批量多件产出
   // =========================================================================
   await play.step('01-legacy-diagnostics-unlocked', async () => {
-    const s = await enterLegacyMode(play);
+    await play.page.evaluate(() => globalThis.localStorage.setItem('p2e2/run-mode', 'legacy'));
+    await play.reload();
+    let s = null;
+    const started = Date.now();
+    while (Date.now() - started < 30000) {
+      await play.advance(0.5);
+      try {
+        const now = await state();
+        if (now.tech?.mode === 'legacy' && (now.inventory.find((e) => e.itemId === 'shaft')?.count ?? 0) >= 20) {
+          s = now;
+          break;
+        }
+      } catch (error) {
+        // 启动/切模式的瞬时不可读：继续等。
+      }
+    }
+    assert(s !== null, 'legacy mode (tech.mode=legacy + legacy kit) not ready');
     assert(s.tech?.mode === 'legacy', 'legacy mode must be active');
     assert(s.diagnostics !== null, 'legacy mode unlocks line-diagnostics, so diagnostics must be non-null');
     assert(diag(s).machines.length === 0 && diag(s).links.length === 0, 'fresh legacy world has no machines/links yet');
     assert(diag(s).bottleneck === null && diag(s).hasError === false, 'fresh world must have no bottleneck/error');
     assert(countOf(s, 'interface_box') > 0 && countOf(s, 'output_interface_box') > 0,
       'legacy kit must include interface boxes (real install path in this scenario)');
-    log('01-LEGACY-BOOT', { mode: s.tech.mode, diagnostics: diag(s) });
   });
 
   await play.step('02-harvest-ore', async () => {
@@ -127,7 +144,7 @@ export default async function playthrough(play) {
       await play.wait(60);
     }
     const s = await state();
-    assert(countOf(s, 'iron_ore') >= before + ORE_COUNT - 2, 'must harvest enough ore');
+    assert(countOf(s, 'iron_ore') >= before + ORE_COUNT - 2, 'harvest short');
   });
 
   await play.step('03-build-three-stage-line', async () => {
@@ -142,7 +159,6 @@ export default async function playthrough(play) {
     assert(s.parts.length === LAYOUT_F.length, 'expected ' + LAYOUT_F.length + ' parts, got ' + s.parts.length);
     assertDiagnosticsMirror(s, 'line-built');
     assert(diag(s).summary.total === 3, 'diagnostics must track the three machines');
-    log('03-LINE', { parts: s.parts.length, blocks: s.production.machines.map((m) => m.block) });
     await shot('03-three-stage-line');
   });
 
@@ -192,7 +208,6 @@ export default async function playthrough(play) {
     s = await state();
     assert(countOf(s, 'shaft') === shaftsBefore + 2, 'both batched shafts must reach the inventory');
     assertDiagnosticsMirror(s, 'batch');
-    log('05-BATCH', { recipe: after.recipeId, output: after.outputCount, shafts: countOf(s, 'shaft') });
     await shot('05-batch-multi-output');
   });
 
@@ -214,7 +229,7 @@ export default async function playthrough(play) {
     assert(s.links.length === 2 && s.links.every((link) => link.active === true), 'two active material links expected');
     assert(portsOf(s, crusherId).length === 1 && portsOf(s, smelterId).length === 2 && portsOf(s, forgeId).length === 1,
       'each machine must have its interface boxes installed');
-    // 切回单件 forge-shaft（批量配方要 4 铁锭/周期，链路只需 2）。
+    // 切回单件 forge-shaft。
     for (let guard = 0; guard < 20 && machineById(await state(), forgeId).recipeId !== 'forge-shaft'; guard += 1) {
       await cycleRecipeAt(FORGE_CELL, forgeId);
     }
@@ -229,7 +244,7 @@ export default async function playthrough(play) {
     const d = assertDiagnosticsMirror(s, 'chain');
     assert(d.links.every((link) => link.severity === 'ok'), 'both links must report ok while delivering material');
     assert(d.machines.some((machine) => machine.severity === 'ok'), 'at least one machine must be reported as healthy');
-    log('06-LINKED', { links: s.links.map((l) => ({ id: l.id, moved: l.moved })), ok: d.links.map((l) => l.severity) });
+    log('06-LINKED', { moved: s.links.map((l) => l.moved), ok: d.links.map((l) => l.severity) });
     await shot('06-linked-diagnostics-empty');
   });
 
@@ -247,7 +262,6 @@ export default async function playthrough(play) {
     assert(d.bottleneck?.kind === 'supply', 'bottleneck must be supply when everything lacks material, got ' + JSON.stringify(d.bottleneck));
     assert(d.bottleneck?.partId === crusherId, 'the most upstream machine must be the bottleneck');
     assert(starving[0].message.includes('缺原料'), 'Chinese message must explain the missing input: ' + starving[0].message);
-    log('07-NO-INPUT', { bottleneck: d.bottleneck, message: starving[0].message });
     await shot('07-diagnostics-no-input');
   });
 
@@ -272,7 +286,6 @@ export default async function playthrough(play) {
     // 只停锻压机动力：上游继续生产 → 输入盒/上游输出盒填满 → 连接阻塞 + 输出满载。
     let s = await state();
     const forgeId = machineById(s, machineOf(s, 'forge-shaft').partId).partId;
-    const forgeCell = FORGE_CELL;
     const forgeSourceId = s.sources.find((source) => {
       const part = s.parts.find((entry) => entry.partId === source.partId);
       return part !== undefined && part.placement.gx === -1 && part.placement.gz === 7;
@@ -304,7 +317,7 @@ export default async function playthrough(play) {
     assert(d.hasError === true, 'downstream saturation is an error-level state');
     assert(d.bottleneck !== null && ['output', 'logistics'].includes(d.bottleneck.kind),
       'bottleneck must describe the downstream blockage, got ' + JSON.stringify(d.bottleneck));
-    log('09-DOWNSTREAM-FULL', { bottleneck: d.bottleneck, fullBox: fullBox.partId, blockedLink: blockedLink.message, summary: d.summary });
+    log('09-DOWNSTREAM-FULL', { bottleneck: d.bottleneck.kind, fullBox: fullBox.partId, summary: d.summary });
     await shot('09-diagnostics-downstream-full');
 
     // 恢复动力并取走产物 → 阻塞必须自行解除（不丢料）。
@@ -314,7 +327,7 @@ export default async function playthrough(play) {
       await play.advance(3.0);
       s = await state();
       const forge = machineById(s, forgeId);
-      if (forge.outputCount > 0) await collectMachine(forgeCell, forgeId, 1);
+      if (forge.outputCount > 0) await collectMachine(FORGE_CELL, forgeId, 1);
       const now = diag(s);
       const hasFull = s.production.machines.some((machine) => machine.block === 'output-full');
       const hasBlockedLink = now !== null && now.links.some((link) => link.blocked === true);
@@ -332,14 +345,7 @@ export default async function playthrough(play) {
     const s = await state();
     const d = assertDiagnosticsMirror(s, 'final');
     assert(d.unlocked === true, 'diagnostics snapshot must declare unlocked=true once visible');
-    log('10-FINAL', {
-      hasError: d.hasError,
-      bottleneck: d.bottleneck,
-      summary: d.summary,
-      machines: d.machines.map((m) => ({ id: m.partId, block: m.block, severity: m.severity })),
-      links: d.links.map((l) => ({ id: l.id, blocked: l.blocked, moved: l.transferred })),
-      produced: s.production.produced,
-    });
+    log('10-FINAL', { hasError: d.hasError, summary: d.summary, blocks: d.machines.map((m) => m.block), links: d.links.length });
     await shot('10-final');
   });
 }

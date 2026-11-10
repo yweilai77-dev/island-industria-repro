@@ -123,8 +123,10 @@ export async function runTechUiPhaseB({ play, kit, ui }) {
     if (project.title.length > 0) {
       assert(project.rect && project.rect.right <= 1280 && project.rect.bottom <= 720,
         'project pane outside 1280x720: ' + JSON.stringify(project.rect));
-      assert(project.items === 0 || project.items === 16,
-        'combined-works delivery list must be empty (service skeleton) or the full 16 items, got ' + project.items);
+      // 真实 endgame 服务把 16 件按 7 个物品种类渲染成 7 行（shaft/interface/output/splitter/merger/frame/vertical_drive）；
+      // 骨架服务（snapshot 为 EMPTY）时是 0 行。两者都接受，其余数量视为渲染错误。
+      assert(project.items === 0 || project.items === 7,
+        'combined-works delivery list must be 0 (skeleton) or 7 line items (16 pieces), got ' + project.items);
     }
     logStep('07-PROJECT', project);
 

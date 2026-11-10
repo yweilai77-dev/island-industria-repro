@@ -110,15 +110,26 @@ export async function runTechUiPhaseA({ play, h, kit, ui }) {
     assert(s.parts.length === 11, 'expected 11 parts, got ' + s.parts.length);
 
     // 启动动力（真实摇柄 + 离合）。
+    // Lead 修复：放置点（avoidHover）在零件放下去之后不一定是「射线打到飞轮」的点，
+    // 必须用 hoverSpecificPart 精确找到悬停点，否则右键不会切换离合（E1 p2e-tech-core 同做法）。
     await h.holdKey('KeyC', 6500);
     const sourcePart = (await state()).parts.find((part) => part.kind === 'power-source');
     assert(sourcePart !== undefined, 'flywheel source must exist');
+    const flywheelPt = await h.hoverSpecificPart(cal, CELL.flywheel, sourcePart.partId);
+    assert(flywheelPt !== null, 'must find a screen point that hovers the flywheel');
+    kit.points.flywheel = flywheelPt;
     await h.selectSlot(SHAFT);
-    await h.clickAt(kit.points.flywheel);
-    await h.rightClickAt(kit.points.flywheel);
+    await h.clickAt(flywheelPt);
+    await h.rightClickAt(flywheelPt);
     await play.advance(0.6);
     s = await state();
-    assert(s.sources[0]?.engaged === true, 'flywheel clutch must engage');
+    if (s.sources[0]?.engaged !== true) {
+      // 第二动力网络/相邻零件可能抢走射线：再补一次右键（幂等，已接合时不会断开）。
+      await h.rightClickAt(flywheelPt);
+      await play.advance(0.6);
+      s = await state();
+    }
+    assert(s.sources[0]?.engaged === true, 'flywheel clutch must engage, engaged=' + String(s.sources[0]?.engaged));
 
     const crusher = machineByRecipe(await state(), 'crush-iron-ore');
     const smelter = machineByRecipe(await state(), 'smelt-crushed-ore');
