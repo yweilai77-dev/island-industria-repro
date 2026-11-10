@@ -4,8 +4,16 @@ import type { HarvestResult, ResourceNode } from '../resource/resource.ts';
 
 /** 采集范围：玩家到矿点 AABB 边缘的水平距离（米）。 */
 export const HARVEST_RANGE = 1.5;
-/** 单次采集耗时（秒）。 */
-export const HARVEST_DURATION = 3;
+/**
+ * 单次采集耗时（秒）。
+ *
+ * P2-E3 兼容性修复：原 3.0 s 与验收脚本的 "press F -> advance(3.4 s)" 只差 0.4 s 余量，
+ * 输入事件落帧稍晚就会让一次采集跨过下一个 advance 边界，表现为「按 N 次只得到 N-1~N-2 个矿」
+ * （E1 已记录为采集时序 flaky）。改为 2.5 s，给输入落帧留 0.9 s 余量，
+ * 同时缩短采矿劳动（配合资源平衡「采矿不应成为主要劳动」的目标）。
+ * 采集产出/范围/状态机语义不变。
+ */
+export const HARVEST_DURATION = 2.5;
 /** 单次采集产出。 */
 export const HARVEST_YIELD = 1;
 

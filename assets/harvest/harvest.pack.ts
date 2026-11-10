@@ -203,6 +203,10 @@ export const ironHarvest: Plugin = {
       };
 
       const state = createHarvestState();
+      // 采集输入排队：一次采集需要 3 s，玩家/验收脚本经常在前一次还没完成时又按 F。
+      // 以前这种按键会被直接忽略（一次输入凭空消失），是「按 N 次只得到 N-1~N-2 个矿」的根因。
+      // 现在把「进行中按 F」记为一次待办：当前采集一完成就立刻开始下一次（不额外产出、不自动连采）。
+      let queuedHarvest = false;
       let elapsedTotal = 0;
       let toastTimer = 0;
       let toastBase: [number, number, number] = [0, 0, 0];
@@ -283,6 +287,7 @@ export const ironHarvest: Plugin = {
                 setRootVisible(promptRoot, true, [center[0], PROMPT_HEIGHT + bob, center[2]], camQuat);
                 if (input.keyboard.justPressedCode('KeyF')) {
                   startHarvest(state, target.id);
+                  queuedHarvest = false;
                   setRootVisible(promptRoot, false);
                 }
               } else {
@@ -293,7 +298,10 @@ export const ironHarvest: Plugin = {
               const locked = nodes.find((node) => node.id === state.nodeId);
               const alive = locked !== undefined && !locked.depleted && locked.amount > 0;
               const inRange = alive && distanceToNodeAabb(px, pz, locked) <= HARVEST_RANGE;
+              // 进行中再按 F：排队一次（不是丢弃、也不是无限连采）。
+              if (input.keyboard.justPressedCode('KeyF')) queuedHarvest = true;
               const tick = advanceHarvest(state, delta, inRange, alive);
+              if (tick.status === 'cancelled') queuedHarvest = false;
 
               if (locked !== undefined) {
                 const center = placementCenter({ gx: locked.gx, gz: locked.gz, w: locked.w, d: locked.d, rotation: 0, level: 0 });
@@ -323,9 +331,17 @@ export const ironHarvest: Plugin = {
                       depletedBase = [center[0], 1.45, center[2]];
                     }
                   }
+                  // 排队的那一次立刻开始（仍需站在原地、节点仍有储量）。
+                  if (queuedHarvest) {
+                    queuedHarvest = false;
+                    if (inRange && (result?.remaining ?? 0) > 0) startHarvest(state, nodeId);
+                  }
+                } else if (tick.status === 'cancelled') {
+                  queuedHarvest = false;
                 }
               } else {
                 setRootVisible(progressRoot, false);
+                queuedHarvest = false;
               }
             }
           },
