@@ -1,5 +1,5 @@
 import { ITEM_IDS } from '../items/items.ts';
-import { createGoalState, evaluateGoal } from './goal.ts';
+import { createGoalState, evaluateGoal, restoreGoalState } from './goal.ts';
 import type {
   GoalMachineObservation,
   GoalNetworkObservation,
@@ -48,6 +48,8 @@ export interface GoalProgressService {
   observation(): GoalObservation;
   /** 订单状态（基线 + 已锁存步骤）的只读副本。 */
   state(): GoalState;
+  /** 读档：恢复 baseline 与 completed 前缀（幂等；损坏字段逐条修复并上报）。 */
+  restoreState(raw: unknown): { readonly repaired: boolean; readonly issues: readonly string[] };
 }
 
 /** 机械运行时内部使用。 */
@@ -157,5 +159,17 @@ export function createGoalProgress(): GoalProgressReader {
     snapshot: () => lastSnapshot,
     observation: () => lastObservation,
     state: () => ({ baseline: { ...goalState.baseline }, completed: [...goalState.completed] }),
+    restoreState(raw) {
+      const outcome = restoreGoalState(raw);
+      goalState = outcome.state;
+      // 恢复后禁止首帧重置基线：订单起点就是存档里的基线。
+      orderStarted = true;
+      lastObservation = EMPTY_GOAL_OBSERVATION;
+      // 用空观测重新生成一次只读快照（不会凭空锁存任何新步骤），下一帧再按真实世界推进。
+      const preview = evaluateGoal(goalState, EMPTY_GOAL_OBSERVATION);
+      goalState = preview.state;
+      lastSnapshot = preview.snapshot;
+      return { repaired: outcome.repaired, issues: outcome.issues };
+    },
   };
 }

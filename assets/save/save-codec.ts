@@ -13,6 +13,7 @@ import {
   SAVE_VERSION,
   normalizeBuildingsSlice,
   normalizeCounters,
+  normalizeEndgameSlice,
   normalizeEngine,
   normalizeFloorsSlice,
   normalizeGoalSlice,
@@ -172,6 +173,7 @@ export function encodeSnapshot(snapshot: SaveSnapshot): string {
       chutes: snapshot.production.chutes.map((record) => ({ ...record })),
     },
     ...(snapshot.tech === undefined ? {} : { tech: snapshot.tech }),
+    ...(snapshot.endgame === undefined ? {} : { endgame: snapshot.endgame }),
     ...(snapshot.goal === undefined
       ? {}
       : { goal: { baseline: { ...snapshot.goal.baseline }, completed: [...snapshot.goal.completed] } }),
@@ -242,6 +244,7 @@ export function decodeSnapshot(raw: unknown): SnapshotDecodeResult {
     const links = collect(normalizeLinksSlice(data.links));
     const production = collect(normalizeProductionSlice(data.production));
     const tech = collect(normalizeTechSlice(data.tech));
+    const endgame = collect(normalizeEndgameSlice(data.endgame));
     const goal = collect(normalizeGoalSlice(data.goal));
     const savedAt = collect(normalizeSavedAt(data.savedAt));
     const engine = collect(normalizeEngine(data.engine));
@@ -274,6 +277,7 @@ export function decodeSnapshot(raw: unknown): SnapshotDecodeResult {
       links,
       production,
       ...(tech === undefined ? {} : { tech }),
+      ...(endgame === undefined ? {} : { endgame }),
       ...(goal === undefined ? {} : { goal }),
     };
     return { ok: true, snapshot, repaired: issues.length > 0, issues };

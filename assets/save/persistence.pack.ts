@@ -34,6 +34,7 @@ import type {} from '../mechanical/runtime.ts';
 import type {} from '../industrial/port.pack.ts';
 import type {} from '../tech/tech.pack.ts';
 import type {} from '../goal/goal-service.ts';
+import type {} from '../endgame/endgame.pack.ts';
 
 export type PersistenceStatus = 'idle' | 'busy' | 'saved' | 'restored' | 'error';
 
@@ -67,9 +68,9 @@ export interface PersistenceService {
   snapshot(): PersistenceSnapshot;
   /** 立即保存（同一 JS 回合内多次请求合并；无 transport 时等注入后补发）。 */
   requestSave(): void;
-  /** 从存档恢复（没有存档时保持初始世界并上报）。 */
+  /** 显式从存档恢复（没有存档时保持初始世界并上报）。引擎不会自动调用。 */
   requestRestore(): void;
-  /** 丢弃存档并从头开始（新游戏）：清存储 + 本次会话不再自动恢复。 */
+  /** 丢弃存档（新游戏）：发 save/clear 并取消尚未发出的读取；读档由前端分档决定。 */
   requestNewGame(): void;
   /** 前端存储读取结果回灌（桥接 save/data 命令）。 */
   onStorageData(payload: PersistenceStoragePayload): PersistenceStorageResult;
@@ -81,10 +82,6 @@ declare module '@forgeax/engine/plugin' {
   }
 }
 
-interface GoalServiceLike {
-  state(): { readonly baseline: unknown; readonly completed: readonly string[] };
-  restoreState?(raw: unknown): { readonly repaired: boolean; readonly issues: readonly string[] };
-}
 
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -107,8 +104,8 @@ export const persistencePlugin: Plugin = {
     let saveScheduled = false;
     let saveDirty = false;
     let readInFlight = false;
-    let restoreRequested = false;
-    let autoRestoreAvailable = true;
+    /** 新游戏后忽略「新游戏之前发出、之后才回来」的旧读取结果（避免清档又被恢复）。 */
+    let restoreSuppressed = false;
     let restoring = false;
 
     const bump = (): void => { revision += 1; };
@@ -145,7 +142,8 @@ export const persistencePlugin: Plugin = {
       const ports = ctx.get('ports');
       const runtimeSave = ctx.get('mechanicalRuntimeSave');
       const tech = ctx.get('tech');
-      const goal = ctx.get('goalProgress') as GoalServiceLike | undefined;
+      const endgameService = ctx.get('endgame');
+      const goal = ctx.get('goalProgress');
 
       const floorsData = floors === undefined
         ? { nextFloorId: 1, floors: [] as const }
@@ -164,6 +162,9 @@ export const persistencePlugin: Plugin = {
         ? { machines: [] as const, chutes: [] as const }
         : safe('production', () => runtimeSave.snapshotProduction(), { machines: [] as const, chutes: [] as const });
       const techState = tech === undefined ? undefined : safe('tech', () => tech.serialize(), undefined);
+      const endgameState = endgameService === undefined
+        ? undefined
+        : safe('endgame', () => endgameService.serialize(), undefined);
       let goalSlice: SaveGoalSlice | undefined;
       if (goal !== undefined) {
         goalSlice = safe('goal', () => {
@@ -210,6 +211,7 @@ export const persistencePlugin: Plugin = {
         links: portsData.links,
         production,
         ...(techState === undefined ? {} : { tech: techState }),
+        ...(endgameState === undefined ? {} : { endgame: endgameState }),
         ...(goalSlice === undefined ? {} : { goal: goalSlice }),
       };
       return { snapshot, issues };
@@ -277,8 +279,12 @@ export const persistencePlugin: Plugin = {
       }
     };
 
+    /**
+     * 显式读取：只有前端（persistent/isolated 分档）或 UI 命令才会调用。
+     * 引擎不再在 transport 注入时隐式读档——读不读只有一个决策点。
+     */
     const requestRestore = (): void => {
-      restoreRequested = true;
+      restoreSuppressed = false;
       if (readInFlight) return;
       postRead();
     };
@@ -367,11 +373,24 @@ export const persistencePlugin: Plugin = {
           }
         }
       }
-      // 12) 订单（本轮到 goal-service 只读为止：保留 issue，明确告诉玩家进度未恢复）
+      // 12) 终局运行证明（必须在 tech 之后：restore 内部会用 tech 快照重建派生视图）
+      if (snapshot.endgame !== undefined) {
+        const endgameService = ctx.get('endgame');
+        if (endgameService === undefined) missing('endgame');
+        else {
+          try {
+            const restored = endgameService.restore(snapshot.endgame);
+            for (const issue of restored.issues) issues.push('endgame: ' + issue);
+          } catch (error) {
+            issues.push('endgame: ' + errorText(error));
+          }
+        }
+      }
+      // 13) 工业订单（baseline + completed 前缀；放在最后，下一帧 goal 求值接上真实世界）
       if (snapshot.goal !== undefined) {
-        const goal = ctx.get('goalProgress') as GoalServiceLike | undefined;
-        if (goal?.restoreState === undefined) {
-          issues.push('goal: order progress not restored yet (goal service is read-only this round)');
+        const goal = ctx.get('goalProgress');
+        if (goal === undefined) {
+          missing('goalProgress');
         } else {
           try {
             const restored = goal.restoreState(snapshot.goal);
@@ -386,6 +405,13 @@ export const persistencePlugin: Plugin = {
 
     const onStorageData = (payload: PersistenceStoragePayload): PersistenceStorageResult => {
       readInFlight = false;
+      if (restoreSuppressed) {
+        restoreSuppressed = false;
+        status = 'idle';
+        message = '已忽略新游戏前发出的旧读取结果';
+        bump();
+        return { ok: false, repaired: false, issues: ['stale read ignored after newGame'] };
+      }
       if (restoring) return { ok: false, repaired: false, issues: ['restore already in progress'] };
       if (payload.found !== true || typeof payload.data !== 'string') {
         hasSave = false;
@@ -431,13 +457,10 @@ export const persistencePlugin: Plugin = {
         if (pendingRead) {
           pendingRead = false;
           postRead();
-          return;
         }
-        // 首次接上通道时自动尝试恢复一次；请求过恢复/新游戏的会话不再自动恢复。
-        if (autoRestoreAvailable && !restoreRequested && !readInFlight) {
-          autoRestoreAvailable = false;
-          requestRestore();
-        }
+        // 注意：这里**不**自动读档。
+        // 读不读由前端分档决定（persistent/isolated 会发 save/restore；off 不发）。
+        // 这样旧验收脚本（无 saveStorageKey 的测试运行）不会被上一次运行的存档污染。
       },
       snapshot: () => ({ status, savedAt, message, version: SAVE_VERSION, hasSave }),
       requestSave: () => {
@@ -451,9 +474,9 @@ export const persistencePlugin: Plugin = {
         requestRestore();
       },
       requestNewGame: () => {
-        autoRestoreAvailable = false;
-        restoreRequested = true;
+        // 清存储 + 取消尚未发出的读取请求 + 忽略已发出但尚未返回的旧读取结果。
         pendingRead = false;
+        restoreSuppressed = true;
         hasSave = false;
         savedAt = null;
         status = 'idle';

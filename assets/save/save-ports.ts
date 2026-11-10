@@ -16,13 +16,11 @@
  *   ports   saveSnapshot/restoreSave（assets/industrial/port.pack.ts）
  *   mechanicalRuntimeSave 动力源启停 + 加工运行时（assets/mechanical/runtime.ts）
  *   tech    serialize/restore    （assets/tech/tech.pack.ts，E1 已就绪，直接复用）
+ *   goal    restoreState         （assets/goal/goal-service.ts；baseline + completed 前缀）
+ *   endgame serialize/restore    （assets/endgame/endgame.pack.ts；恢复在 tech 之后）
  *
- * 待接入（本轮不能改这些目录，见 docs/m20/P2-E3-SAVE-DESIGN.md 的剩余集成清单）：
- *   goal    订单 baseline/completed：goalProgress 目前只读；需要 goal-service 增加 restoreState。
- *   endgame 运行证明窗口是瞬时状态，终局完成标记在 TechState（无需单独切片），
- *           只需确认读档后窗口回到 idle（当前由插件重建即满足，无需接口）。
- *   diagnostics 纯派生量，不进存档。
- *   assembly    组合关系由结构相邻关系派生，不进存档。
+ * 不进存档（派生量，见设计文档 §3）：diagnostics / assembly / 视图实体 / 空间索引。
+ * 读档触发：引擎不再自动读；只有显式 requestRestore 才发 save/read（前端按 off/isolated/persistent 分档）。
  */
 
 import type {
@@ -102,10 +100,16 @@ export interface TechSavePort {
   restore(raw: unknown): { readonly state: unknown; readonly repaired: boolean; readonly issues: readonly string[] };
 }
 
-/** TODO(P2-E3 第二轮)：订单状态恢复端口；goal-service 只需增加 restoreState。 */
+/** 订单端口：goalProgress 同时提供只读 state() 与读档 restoreState()。 */
 export interface GoalSavePort {
   state(): { readonly baseline: { readonly crushedOre: number; readonly ironIngot: number; readonly shaft: number }; readonly completed: readonly string[] };
-  restoreState?(raw: unknown): { readonly repaired: boolean; readonly issues: readonly string[] };
+  restoreState(raw: unknown): { readonly repaired: boolean; readonly issues: readonly string[] };
+}
+
+/** 终局端口：运行证明窗口状态（serialize 形状由 endgame.ts 定义，restore 自校验）。 */
+export interface EndgameSavePort {
+  serialize(): unknown;
+  restore(raw: unknown): { readonly repaired: boolean; readonly issues: readonly string[] };
 }
 
 /** 供编排层记录一条问题文本的小工具（纯函数）。 */

@@ -36,6 +36,20 @@ function createHarness(): Harness {
   };
   const services: Record<string, unknown> = {
     player,
+    tech: {
+      serialize: () => ({ version: 1, mode: 'player', delivered: {}, unlocked: [], trackedId: null }),
+      restore: (_raw: unknown) => { calls.push('tech'); return { state: {}, repaired: false, issues: [] }; },
+    },
+    endgame: {
+      serialize: () => ({ version: 1, state: 'idle', startedAt: null, elapsedSeconds: 0, produced: 0, baseline: {}, passed: false, failureReason: null, lastConclusion: null }),
+      restore: (_raw: unknown) => { calls.push('endgame'); return { repaired: false, issues: [] }; },
+    },
+    goalProgress: {
+      snapshot: () => null,
+      observation: () => ({ ironOre: 0, parts: [], machines: [], sources: [], networks: [], produced: [] }),
+      state: () => ({ baseline: { crushedOre: 0, ironIngot: 0, shaft: 0 }, completed: [] }),
+      restoreState: (_raw: unknown) => { calls.push('goal'); return { repaired: false, issues: [] }; },
+    },
     inventory: {
       snapshot: () => ({ stacks: [] }),
       restore: () => { calls.push('inventory'); return { restored: 0, issues: [] }; },
@@ -75,9 +89,10 @@ describe('persistence 保存编排', () => {
     harness.service.requestSave();
     expect(harness.messages).toEqual([]);
     harness.setTransport();
-    // setTransport 会先兜底自动读档：先收到 save/read。
-    expect(harness.messages[0]).toEqual({ type: 'save/read' });
+    // 引擎不再在 transport 注入时自动读档：注入本身不发任何消息。
+    expect(harness.messages).toEqual([]);
     await flushMicrotasks();
+    expect(harness.messages[0]).toMatchObject({ type: 'save/write' });
     const write = harness.messages.find((message) => message.type === 'save/write');
     expect(write).toBeDefined();
     const decoded = decodeSnapshot(write!.data);
@@ -88,6 +103,16 @@ describe('persistence 保存编排', () => {
     expect(snapshot.status).toBe('saved');
     expect(snapshot.hasSave).toBe(true);
     expect(typeof snapshot.savedAt).toBe('string');
+  });
+
+  it('transport 注入本身不会发 save/read（显式 requestRestore 才会读）', async () => {
+    const harness = createHarness();
+    harness.setTransport();
+    await flushMicrotasks();
+    expect(harness.messages.some((message) => message.type === 'save/read')).toBe(false);
+    expect(harness.service.snapshot().status).toBe('idle');
+    harness.service.requestRestore();
+    expect(harness.messages.some((message) => message.type === 'save/read')).toBe(true);
   });
 
   it('同一 JS 回合多次 requestSave 合并成一次写入', async () => {
@@ -135,6 +160,20 @@ describe('persistence 读取与恢复编排', () => {
     expect(harness.calls).toEqual([]);
   });
 
+  it('新游戏后忽略「新游戏前发出」的旧读取结果', () => {
+    const harness = createHarness();
+    harness.setTransport();
+    harness.service.requestRestore();
+    expect(harness.messages.some((message) => message.type === 'save/read')).toBe(true);
+    harness.service.requestNewGame();
+    const stale = encodeSnapshot({ ...emptySnapshot(), goal: { baseline: { crushedOre: 1, ironIngot: 0, shaft: 0 }, completed: [] } });
+    const result = harness.service.onStorageData({ found: true, data: stale });
+    expect(result.ok).toBe(false);
+    expect(result.issues.join(' ')).toMatch(/stale read/);
+    expect(harness.calls).toEqual([]);
+    expect(harness.service.snapshot().hasSave).toBe(false);
+  });
+
   it('可解析的存档逐切片恢复；缺失服务只记录 issue 不中断', () => {
     const harness = createHarness();
     harness.setTransport();
@@ -146,8 +185,8 @@ describe('persistence 读取与恢复编排', () => {
     };
     const result = harness.service.onStorageData({ found: true, data: encodeSnapshot(saved) });
     expect(result.ok).toBe(true);
-    // fake 世界只提供 player/inventory/hotbar/resourceNodes 四个切片。
-    expect(harness.calls).toEqual(['player', 'inventory', 'hotbar', 'resources']);
+    // fake 世界提供 player/inventory/hotbar/resourceNodes + goalProgress；该存档没有 tech/endgame 切片。
+    expect(harness.calls).toEqual(['player', 'inventory', 'hotbar', 'resources', 'goal']);
     const snapshot = harness.service.snapshot();
     expect(snapshot.status).toBe('restored');
     expect(snapshot.savedAt).toBe('2026-11-10T01:02:03.000Z');
@@ -155,6 +194,21 @@ describe('persistence 读取与恢复编排', () => {
     // 建筑/机械/接口盒等切片在 fake 世界缺失：只要存档里有内容就必须报 issue。
     expect(result.repaired).toBe(true);
     expect(result.issues.join(' ')).toMatch(/buildings|mechanical|goal/);
+  });
+
+  it('恢复顺序：tech -> endgame -> goal', () => {
+    const harness = createHarness();
+    harness.setTransport();
+    const saved = {
+      ...emptySnapshot(),
+      tech: { version: 1, mode: 'player', delivered: {}, unlocked: [], trackedId: null },
+      endgame: { version: 1, state: 'idle', startedAt: null, elapsedSeconds: 0, produced: 0, baseline: {}, passed: false, failureReason: null, lastConclusion: null },
+      goal: { baseline: { crushedOre: 0, ironIngot: 0, shaft: 0 }, completed: [] },
+    };
+    const result = harness.service.onStorageData({ found: true, data: encodeSnapshot(saved) });
+    expect(result.ok).toBe(true);
+    const progression = harness.calls.filter((call) => call === 'tech' || call === 'endgame' || call === 'goal');
+    expect(progression).toEqual(['tech', 'endgame', 'goal']);
   });
 });
 

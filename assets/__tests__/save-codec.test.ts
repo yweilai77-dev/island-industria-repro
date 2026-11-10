@@ -60,6 +60,17 @@ function fixture(): SaveSnapshot {
       unlocked: [],
       trackedId: null,
     },
+    endgame: {
+      version: 1,
+      state: 'passed',
+      startedAt: 12,
+      elapsedSeconds: 60,
+      produced: 13,
+      baseline: { '5': 4 },
+      passed: true,
+      failureReason: null,
+      lastConclusion: { at: 72, passed: true, produced: 13, reason: null },
+    },
     goal: { baseline: { crushedOre: 2, ironIngot: 1, shaft: 0 }, completed: ['gather-ore'] },
   };
 }
@@ -102,6 +113,18 @@ describe('快照往返', () => {
 });
 
 describe('未知/非法数据修复', () => {
+  it('endgame 切片往返保留；缺版本/未来版本逐条丢弃并记录', () => {
+    const decoded = decodeOk(fixture());
+    expect((decoded.snapshot.endgame as { state: string }).state).toBe('passed');
+    expect((decoded.snapshot.endgame as { produced: number }).produced).toBe(13);
+    const missingVersion = decodeOk({ ...fixture(), endgame: { state: 'idle' } });
+    expect(missingVersion.snapshot.endgame).toBeUndefined();
+    expect(missingVersion.issues.join(' ')).toMatch(/endgame state version/);
+    const future = decodeOk({ ...fixture(), endgame: { version: 2, state: 'idle' } });
+    expect(future.snapshot.endgame).toBeUndefined();
+    expect(future.repaired).toBe(true);
+  });
+
   it('未知物品/未知系统/未知字段逐条丢弃并记录 issues', () => {
     const raw = {
       ...fixture(),

@@ -1,10 +1,10 @@
 # M2.0-P2-E3 正式存档设计（快照 v1）
 
 - 阶段：M2.0-P2-E3（工作包 E：持久化与恢复）
-- 状态：第一轮落地「数据层 + 世界状态快照/恢复」；真实游戏验收脚本已写、待 Lead 串行运行。
+- 状态：第一轮（数据层+世界状态）与第二轮（引擎去自动读档、goal/endgame 接入、文件拆分）完成；真实游戏脚本待 Lead 串行运行。
 - 结论先行：项目此前没有任何存档实现；本设计把 docs/design/SAVE-ARCHITECTURE.md 的快照 v1
   **扩展并落地**为正式存档（不是临时科技存档）。科技进度直接复用 E1 的
-  tech.serialize()/restore()，没有第二套科技存档。
+  tech.serialize()/restore()。
 
 ---
 
@@ -24,8 +24,8 @@
 | 接口盒 | assets/industrial/port-runtime.ts 的 byPart（安装位+module+缓冲） | ports 服务读投影 snapshot() | 新增 PortRuntime.restore + ports.saveSnapshot/restoreSave |
 | 物料连接 | assets/industrial/link-runtime.ts 的 byId + movedById + 轮询游标 | ports.links() 读投影 | 新增 MaterialLinkRuntime.restore（只校验两端，几何状态运行时重算）；游标不存（派生） |
 | 科技 | assets/tech/state.ts 的 TechState（E1） | tech.serialize()/restore() | 直接复用，不新增接口 |
-| 订单 | assets/goal/goal-service.ts 的 GoalState（baseline + completed） | goalProgress 只读 state()/snapshot() | **未恢复**：本轮到 goal-service 只读为止，见 §7 |
-| 终局 | endgame-types.ts 读投影；完成标记在 TechState 的 T3.3 交付 | endgame 服务只读 | 无需单独切片：终局完成 = tech 进度；运行证明窗口是瞬时状态 |
+| 订单 | assets/goal/goal-service.ts 的 GoalState（baseline + completed） | goalProgress：state() + **restoreState()** | 纯函数 restoreGoalState：baseline 钳制 + completed 前缀校验，插入后不重置基线（幂等） |
+| 终局 | endgame.ts 的 EndgameProof 窗口状态（state/基线/已累计/passed/上次结论） | endgame.serialize()/restore() | 新增 endgame 切片；恢复在 tech 之后（restore 内部读 tech 快照重建派生视图） |
 | 诊断 | diagnostics 完全由动力/加工/接口盒状态派生 | diagnostics 只读 | **不存**（派生量） |
 | 组合机械 | assembly 每帧从结构相邻关系推导 | assembly 只读 | **不存**（派生量） |
 | 相机/UI/采集/幽灵预览 | camera.pack、frontend、harvest、build 局部变量 | 只读/瞬时 | **不存**（观感或瞬态） |
@@ -65,6 +65,9 @@
         "chutes": [ { "partId": 7, "itemId": "iron_ore", "t": 0.4, "blocked": false, "delivered": 3 } ]
       },
       "tech": { "version": 1, "mode": "player", "delivered": {}, "unlocked": [], "trackedId": null },
+      "endgame": { "version": 1, "state": "running", "startedAt": 10, "elapsedSeconds": 12.5,
+                   "produced": 4, "baseline": { "5": 8 }, "passed": false,
+                   "failureReason": null, "lastConclusion": null },
       "goal": { "baseline": { "crushedOre": 0, "ironIngot": 0, "shaft": 0 }, "completed": [] }
     }
 
@@ -77,10 +80,10 @@
 - **楼层（floors）是 v1 新增的必需切片**：它是玩家建造的支撑面来源，不是派生量。
   不存楼层会导致多层工厂的楼板/楼梯/上层建筑全部丢失。
 - **接口盒缓冲与加工缓冲都存**：它们是真实物品所有权，不存等于读档吞物品。
-- **tech 是原样 TechState JSON**：版本由 TECH_STATE_VERSION 管理，存档版本不越界解释。
-- **goal 预留**：本轮保存 baseline/completed（goalProgress.state() 只读），但恢复未接。
-- 体积实测：空快照 445 B；一个 20 零件 + 2 建筑 + 2 楼层 + 2 接口盒 + 1 连接 + 4 矿点的
-  中型工厂快照约 3.3 KB（encodeSnapshot 实测）。硬上限 512 KB 只用于防御损坏数据。
+- **tech / endgame / goal 都是各自版本的 JSON**：tech 由 TECH_STATE_VERSION、endgame 由 version:1、
+  goal 由 completed 前缀规则各自校验；快照版本只做外层迁移。
+- 体积实测：空快照 445 B；20 零件 + 2 建筑 + 2 楼层 + 2 接口盒 + 1 连接 + 4 矿点的中型工厂约 3.3 KB。
+  硬上限 512 KB 只用于防御损坏数据。
 
 ---
 
@@ -120,7 +123,8 @@
 10. links（物料连接；只校验两端，几何状态运行时重算）
 11. production（机器缓冲/进度 + 溜槽在途物品）
 12. tech（复用 tech.restore，未知节点/物品逐条修复）
-13. goal（预留：本轮到 goal-service 只读为止，见 §7）
+13. endgame（终局运行证明窗口；必须在 tech 之后，restore 会用 tech 快照重建派生视图）
+14. goal（baseline + completed 前缀；下一帧 goal 求值接上真实世界）
 
 事务策略（诚实边界）：
 - **整包不可解析**（坏 JSON / 非对象 / 未来版本 / 超限）→ 不碰世界，status=error，
@@ -161,9 +165,7 @@
 - 接口盒缓冲件数夹到安装位容量；count>0 但 itemId 为空 → 清空并记录；
 - 连接两端必须存在 output→input，缺失的逐条跳过；
 - 加工缓冲件数夹到机器容量；recipeId 不存在 → 回退默认配方并记录；
-- 重复 id / 重复堆叠 / 重复绑定 → 保留第一个，后续丢弃并记录；
-- 计数器小于已恢复最大 id → 自动抬高（防 id 冲突）；
-- savedAt 非法 → 使用 epoch（确定性，便于测试）。
+- 重复 id/堆叠/绑定 → 保留第一个；计数器小于已恢复最大 id → 自动抬高；savedAt 非法 → epoch。
 
 所有失败都进入 issues（人话），onStorageData 返回 repaired=true；UI 通过 save.message 显示前 3 条。
 
@@ -178,32 +180,20 @@
 | 飞轮储能 energy | 属于运行中的瞬时能量；SAVE-ARCHITECTURE 只要求存启停 | 读档后飞轮需重新摇；若需要长时储能体验，可升 v2 增 energy 字段 |
 | 相机 yaw / 距离；加工全局累计产出 producedTotals | 观感 / 不涉及物品所有权（订单与终局按窗口增量判定） | 镜头回默认；生产目标基线重新开始 |
 | 加工 running/block | 当帧派生 | 下一帧重算 |
-| 诊断 / 终局运行证明窗口 | 纯派生 / 瞬时 | 读档后窗口回到 idle |
+| 诊断读数 | 纯派生 | 下一帧重算 |
 | 采集进度、UI 开关/页签、幽灵/选中/调整状态 | 瞬时 | 读档时取消 |
 | 组合机械 assembly | 结构相邻关系派生 | 自动重建 |
 
 ### 7.2 剩余集成清单（需要谁配合）
 
-1. **订单状态恢复（goal-service，Goal 工程师）**
-   - 现状：goalProgress 只暴露 state()（只读），persistence 已把 goal 切片写进快照；
-   - 需要：goal-service 增加 restoreState(raw)（校验 baseline/completed，锁存步骤按顺序），
-     并在 mechanical/runtime.ts 的 goalProgress 服务上转发；persistence 已按
-     restoreState 是否存在自动调用（不存在时记 issue）。
-2. **前端存储通道 + 保存触发（Frontend/桥接工程师）** — 已落地（frontend-save-channel.ts）
-   - 下行：persistence 经 transport 发 save/write {data} / save/read / save/clear；
-     前端写/读 localStorage（key 由 saveStorageKey 覆盖），读取结果用 save/data 回灌。
-   - 触发点：visibilitychange 隐藏、立即保存按钮、每 15 s、新游戏按钮；
-     引擎只负责 requestSave（同回合合并）与 requestNewGame（清存储 + 不再自动恢复）。
-   - 启动恢复握手：前端在首个 state 后自动发 save/restore；persistence 在 transport 首次注入时
-     也兜底自动发一次 save/read（幂等；请求过 restore/newGame 的会话不再自动恢复）。
-   - 验收脚本可用正式按钮 [data-ii-action=save-request|save-restore|save-new] 触发，
-     或在前端提供 __II_TEST_SAVE__ 时走测试入口。
-3. **真实游戏验收脚本（Lead 串行跑）**：scripts/p2e3-save-reload.mjs，见 §9。
-4. **新游戏语义**：requestNewGame 只做「清存储 + 本会话不再自动恢复」，不原地重建世界
-   （引擎没有「重开世界」的现有原语）；前端收到确认后应 reload 页面进入全新世界。
-5. **多槽位/云存档/自动保存 UI**：不在 v1 范围。
-6. docs/PROGRESS.md 与既有报告由 Lead 更新；本轮不修改。
-
+1. **前端分档（tech-ui）**：测试运行按 `__II_TEST_FLAGS__` 分档——无 flags=player（自动读+自动存）；
+   有 flags 且带 `saveStorageKey`=isolated（该 key 持久化，供 p2e3 脚本）；有 flags 无 key=off
+   （不自动读、不自动存、save/read 回 found:false、内存存储）。旧验收脚本因此不再被默认 key 污染。
+2. **引擎侧已去自动读**：persistence.setTransport 不再发 save/read，只有显式 requestRestore 才读；
+   真实玩家恢复完全由前端 persistent/isolated 分档的 save/restore 触发。
+3. **真实游戏脚本（Lead 串行跑）**：scripts/p2e3-save-reload.mjs（+ lib / phase-a / phase-b）。
+4. **新游戏语义**：requestNewGame 只清存储 + 取消未发出的读取，不原地重建世界；前端确认后 reload。
+5. **多槽位/云存档**：不在 v1 范围；docs/PROGRESS.md 与既有报告由 Lead 更新，本轮不修改。
 ---
 
 ## 8. 自动保存触发点（契约）
@@ -216,7 +206,8 @@
 | 科技提交成功后 | 前端（收到 tech 成功回执） | 紧急保存点：避免刷新丢科技 |
 | 新游戏 | 前端 | requestNewGame（save/new 命令带 confirm:true） |
 
-引擎侧只保证：requestSave 幂等、同 JS 回合合并、transport 未注入时挂起并在注入后补发。
+引擎侧只保证：requestSave 幂等、同 JS 回合合并、transport 未注入时挂起并在注入后补发；
+**不再自动读档**。off 模式下前端不启动 15 s timer/visibilitychange 保存，也不回 found:true。
 
 ---
 
@@ -224,7 +215,7 @@
 
 ### 9.1 单测（本轮已跑，不依赖引擎）
 
-- assets/__tests__/save-codec.test.ts（13 例）：
+- assets/__tests__/save-codec.test.ts（14 例）：
   - encode→JSON→decode 往返相等；防御性拷贝（改输入对象不影响解码结果）；
   - 未知字段/未知系统/未知物品/未知 kind 丢弃；非法值钳制；计数器自动抬高；
   - 缺失字段补默认；版本缺失/v0 迁移；未来版本拒绝；坏 JSON/null/数组/超大字符串不崩溃。
@@ -234,26 +225,20 @@
   - MaterialLinkRuntime.restore 两端校验/累计传递/moved 保留；
   - 加工运行时 snapshot→JSON→restore 后缓冲/进度/溜槽在途一致；
   - MechanicalRegistry nextPartId 存取与 clear 归位。
-- assets/__tests__/save-persistence.test.ts（7 例）：用 fake EngineContext 验证编排层：
-  - transport 注入前挂起、注入后补发；同回合多次 requestSave 合并；
-  - 新游戏发 save/clear + hasSave 归 false；
-  - 无存档/坏 JSON 保持世界不变；可解析存档逐切片恢复、缺失服务只记 issue；
-  - 初始状态 idle + version=1 + 无存档。
+- assets/__tests__/save-goal-endgame.test.ts（8 例）：goal restoreGoalState 往返/前缀/钳制/幂等；
+  goalProgress 恢复后不重置基线；endgame 切片往返与损坏丢弃。
+- assets/__tests__/save-persistence.test.ts（10 例）：fake EngineContext 验证编排层：
+  - transport 注入**不**自动读档；显式 requestRestore 才发 save/read；
+  - 注入前挂起/注入后补发；同回合多次 requestSave 合并；新游戏 save/clear；
+  - 无存档/坏 JSON 保持世界不变；恢复顺序 tech → endgame → goal。
 
 ### 9.2 真实游戏脚本（本轮写好，待 Lead 串行执行）
 
-scripts/p2e3-save-reload.mjs（预期 9 个 step，真实键鼠）：
-1. 启动 player 模式；2. 采矿石；3. 搭真实工厂（破碎-熔炼-锻压 + 飞轮 + 传动）；
-4. 生产并交付一个科技节点；5. 放 1 个普通建筑（证明 buildings 切片）；
-6. 断开动力后手动保存，校验存档 JSON 与当前世界一致、体积受限；
-7. play.reload() 触发启动自动恢复；
-8. 逐项断言库存/建筑/零件(id+kind+placement)/科技/矿量/玩家位置一致；
-9. 稳定性：不重复发放起步包、零件 id 不重复、矿量不重复扣减、恢复后仍可重新启动动力。
-断言失败信息带「期望/实际/存档字段」，便于定位。
+scripts/p2e3-save-reload.mjs（预期 9 个 step，真实键鼠）：启动 player 模式 → 采矿 → 搭工厂 →
+交付科技 → 放建筑 → 断动力后手动保存并校验 JSON/体积 → play.reload() →
+逐项断言库存/建筑/零件(id+kind+placement)/科技/矿量/玩家位置 → 稳定性（不起步包、不重复 id、不重复扣矿、可重新启动动力）。
 
-### 9.3 负面用例
-
-损坏 JSON / 未来版本 / 无存档 / 重复恢复由 save-codec 与 save-persistence 单测覆盖（不启动游戏）。
+负面用例（坏 JSON/未来版本/无存档/重复恢复）由 save-codec 与 save-persistence 单测覆盖。
 
 ---
 
@@ -261,7 +246,11 @@ scripts/p2e3-save-reload.mjs（预期 9 个 step，真实键鼠）：
 
 | 文件 | 说明 |
 |:--|:--|
-| assets/save/save-schema.ts | 快照类型 + SAVE_VERSION + 各切片纯规整函数 |
+| assets/save/save-schema.ts | 聚合 re-export（调用方 import 不变，拆成下列 4 个文件） |
+| assets/save/save-types.ts | 快照类型 + 版本常量 |
+| assets/save/save-normalize-primitives.ts | 规整原语（钳制/id 校验/默认值） |
+| assets/save/save-normalize-core.ts | 玩家/库存/快捷栏/起步包/计数器/时间戳 |
+| assets/save/save-normalize-world.ts | 楼层/建筑/零件/资源/接口盒/连接/加工/tech/goal/endgame |
 | assets/save/save-codec.ts | encodeSnapshot / decodeSnapshot / migrateSnapshot |
 | assets/save/save-ports.ts | 各系统窄接口 + 待接入 TODO |
 | assets/save/persistence.pack.ts | persistence 服务（收集/保存/读取/恢复编排/通道） |
@@ -273,14 +262,17 @@ scripts/p2e3-save-reload.mjs（预期 9 个 step，真实键鼠）：
 | assets/build/floors.pack.ts | floors 服务 snapshotSave/restoreSave |
 | assets/mechanical/registry.ts | nextPartId 存取 |
 | assets/mechanical/mechanical.pack.ts | saveSnapshot/restoreSave |
-| assets/mechanical/runtime.ts | mechanicalRuntimeSave（启停 + 加工） |
+| assets/mechanical/runtime.ts | 只读 GameRead 编排（存档服务已抽出，19.7 KB） |
+| assets/mechanical/runtime-save.ts | mechanicalRuntimeSave（启停 + 加工）+ GameRead 只读字段 |
 | assets/mechanical/production-save.ts | 加工运行时切片纯逻辑 |
+| assets/mechanical/mechanical-save.ts | 机械零件 saveSnapshot/restoreSave（从 pack 抽出） |
 | assets/industrial/port-runtime.ts | PortRuntime.restore |
 | assets/industrial/link-runtime.ts | MaterialLinkRuntime.restore |
 | assets/industrial/ports.ts + port.pack.ts | saveSnapshot/restoreSave |
 | assets/__tests__/save-codec.test.ts | 编解码/迁移/容错（13 例） |
 | assets/__tests__/save-slices.test.ts | 切片往返（12 例） |
-| assets/__tests__/save-persistence.test.ts | 持久化编排（7 例，fake ctx） |
-| scripts/p2e3-save-reload.mjs | 真实游戏验收（待跑；9 个 step） |
+| assets/__tests__/save-persistence.test.ts | 持久化编排（10 例，fake ctx） |
+| assets/__tests__/save-goal-endgame.test.ts | goal/endgame 恢复（8 例） |
+| scripts/p2e3-save-reload.mjs | 编排入口：两段 phase + lib（待跑；9 个 step） |
 | docs/m20/P2-E3-SAVE-DESIGN.md | 本文档 |
 | assets/mechanical/runtime.ts（GameRead 增量） | 唯一 GameRead 新增只读 buildings/resources 字段，供存档验收断言 |

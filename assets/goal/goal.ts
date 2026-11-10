@@ -204,6 +204,75 @@ export function evaluateGoal(state: GoalState, observation: GoalObservation): Go
   return { state: nextState, snapshot: buildSnapshot(nextState, observation, context) };
 }
 
+export interface GoalRestoreResult {
+  readonly state: GoalState;
+  readonly repaired: boolean;
+  readonly issues: readonly string[];
+}
+
+function restoreBaselineNumber(value: unknown, label: string, issues: string[]): number {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    issues.push('baseline ' + label + ' is not a finite number; reset to 0');
+    return 0;
+  }
+  if (value < 0) {
+    issues.push('baseline ' + label + ' is negative; clamped to 0');
+    return 0;
+  }
+  const floored = Math.floor(value);
+  if (floored !== value) issues.push('baseline ' + label + ' is not an integer; floored');
+  return floored;
+}
+
+/**
+ * 从不可信存档数据恢复订单状态（纯函数，幂等）：
+ * - baseline 三个计数逐项钳制为非负整数；
+ * - completed 必须是 GOAL_STEPS 的**前缀**（订单锁存是顺序的），未知/乱序项丢弃并记录；
+ * - 非对象/缺字段补默认；绝不抛异常。
+ */
+export function restoreGoalState(raw: unknown): GoalRestoreResult {
+  const issues: string[] = [];
+  const source = typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+    ? raw as Record<string, unknown>
+    : {};
+  if (raw !== undefined && (typeof raw !== 'object' || raw === null || Array.isArray(raw))) {
+    issues.push('goal state is not an object; using empty state');
+  }
+  const rawBaseline = typeof source.baseline === 'object' && source.baseline !== null
+    ? source.baseline as Record<string, unknown>
+    : {};
+  const baseline: GoalProducedBaseline = {
+    crushedOre: restoreBaselineNumber(rawBaseline.crushedOre, 'crushedOre', issues),
+    ironIngot: restoreBaselineNumber(rawBaseline.ironIngot, 'ironIngot', issues),
+    shaft: restoreBaselineNumber(rawBaseline.shaft, 'shaft', issues),
+  };
+  const known = new Set<string>(GOAL_STEPS.map((step) => step.id));
+  const wanted = new Set<string>();
+  const rawCompleted = Array.isArray(source.completed) ? source.completed : [];
+  for (const id of rawCompleted) {
+    if (typeof id !== 'string' || !known.has(id)) {
+      issues.push('unknown goal step dropped: ' + String(id));
+      continue;
+    }
+    wanted.add(id);
+  }
+  // 锁存只可能是前缀：按 GOAL_STEPS 顺序取到第一个缺口为止。
+  const completed: GoalStepId[] = [];
+  for (const step of GOAL_STEPS) {
+    if (!wanted.has(step.id)) break;
+    completed.push(step.id);
+  }
+  if (completed.length !== wanted.size) {
+    issues.push('completed steps are not a prefix of the order; out-of-order steps dropped');
+  }
+  return {
+    state: { baseline, completed },
+    repaired: issues.length > 0,
+    issues,
+  };
+}
+
 export {
   GOAL_REQUIREMENTS,
   GOAL_STEPS,
