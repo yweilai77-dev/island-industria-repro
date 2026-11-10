@@ -154,6 +154,61 @@ export const FORGE_STRUCTURE_FRAME_RECIPE: Recipe = {
   seconds: 5,
 };
 
+/**
+ * P2-E1：科技树解锁的新配方（6 条，全部追加在列表末尾，既有配方下标不变）。
+ *
+ * 全部沿用「单输入单输出」的既有运行时约束（运行时不支持多输入/副产物），
+ * 因此飞轮配方简化为 12 铁锭（E0 §4.9 原为 10 铁锭 + 2 齿轮24，多输入运行时未实现）。
+ */
+export const FORGE_GEAR_12_RECIPE: Recipe = {
+  id: 'forge-gear-12',
+  label: '锻压 12 齿齿轮',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 1 }],
+  outputs: [{ itemId: ITEM_IDS.GEAR_12, count: 2 }],
+  seconds: 4,
+};
+
+export const FORGE_GEAR_24_RECIPE: Recipe = {
+  id: 'forge-gear-24',
+  label: '锻压 24 齿齿轮',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 1 }],
+  outputs: [{ itemId: ITEM_IDS.GEAR_24, count: 1 }],
+  seconds: 5,
+};
+
+export const FORGE_FLYWHEEL_RECIPE: Recipe = {
+  id: 'forge-flywheel',
+  label: '锻压手摇飞轮储能机',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 12 }],
+  outputs: [{ itemId: ITEM_IDS.FLYWHEEL_SOURCE, count: 1 }],
+  seconds: 12,
+};
+
+/** T3.1 标准化批量加工：同物品多件产出（运行时只取 outputs[0].count，已验证支持）。 */
+export const FORGE_BATCH_SHAFT_RECIPE: Recipe = {
+  id: 'forge-batch-shaft',
+  label: '批量锻压传动轴',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 4 }],
+  outputs: [{ itemId: ITEM_IDS.SHAFT, count: 2 }],
+  seconds: 7,
+};
+
+export const FORGE_BATCH_INTERFACE_BOX_RECIPE: Recipe = {
+  id: 'forge-batch-interface-box',
+  label: '批量锻压基础接口盒',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 6 }],
+  outputs: [{ itemId: ITEM_IDS.INTERFACE_BOX, count: 3 }],
+  seconds: 9,
+};
+
+export const FORGE_BATCH_STRUCTURE_FRAME_RECIPE: Recipe = {
+  id: 'forge-batch-structure-frame',
+  label: '批量锻压结构框架',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 6 }],
+  outputs: [{ itemId: ITEM_IDS.STRUCTURE_FRAME, count: 2 }],
+  seconds: 8,
+};
+
 /** 每台机器的配方列表；`recipeIndex` 是玩家用 R 切换的下标。 */
 export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>>> = Object.freeze({
   crusher: Object.freeze([CRUSH_RECIPE]),
@@ -170,6 +225,13 @@ export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>
     FORGE_SMELTER_RECIPE,
     FORGE_CORE_RECIPE,
     FORGE_STRUCTURE_FRAME_RECIPE,
+    // P2-E1：科技解锁配方（追加在末尾，既有下标不变）。
+    FORGE_GEAR_12_RECIPE,
+    FORGE_GEAR_24_RECIPE,
+    FORGE_FLYWHEEL_RECIPE,
+    FORGE_BATCH_SHAFT_RECIPE,
+    FORGE_BATCH_INTERFACE_BOX_RECIPE,
+    FORGE_BATCH_STRUCTURE_FRAME_RECIPE,
   ]),
 });
 

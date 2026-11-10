@@ -30,6 +30,16 @@ export const frontendUi: Plugin = {
     const root = host.uiRoot;
     const port = host.port;
     const app = host.app ?? {};
+    /**
+     * P2-E1 测试脚手架标志（仅验收脚本通过 page.addInitScript 注入）：
+     * - progression: 'legacy' 让旧 M1/P2 验收脚本回到历史套件/行为；
+     * - techHooks: true 暴露 __II_TEST_TECH__（科技交付的真实事务入口，不做任何门控绕过）。
+     * 正式玩家页面不会设置这个全局，因此正式流程既没有兼容模式也没有测试入口。
+     */
+    const testFlags = (globalThis as { __II_TEST_FLAGS__?: unknown }).__II_TEST_FLAGS__;
+    const flags = typeof testFlags === 'object' && testFlags !== null
+      ? testFlags as { progression?: 'player' | 'legacy'; techHooks?: boolean }
+      : undefined;
     const canvas = host.canvas;
     const onCanvasContextMenu = (event: MouseEvent): void => {
       // 只抑制游戏 canvas；页面其他区域保持浏览器默认右键菜单。
@@ -431,7 +441,16 @@ export const frontendUi: Plugin = {
         render();
       };
       port.start?.();
-      send({ type: 'hello' });
+      send({ type: 'hello', ...(flags ? { flags } : {}) });
+      if (flags?.techHooks === true) {
+        // E1 验收入口：调用的是与 E2 科技页完全相同的 MessagePort 命令（真实校验、真实扣料）。
+        (window as unknown as Record<string, unknown>).__II_TEST_TECH__ = {
+          submit: (nodeId: string, itemId: string, count: number) => send({ type: 'tech/submit', nodeId, itemId, count }),
+          submitAll: (nodeId: string) => send({ type: 'tech/submit-all', nodeId }),
+          track: (nodeId: string | null) => send({ type: 'tech/track', nodeId }),
+          requestState: () => send({ type: 'state/request' }),
+        };
+      }
     } else {
       showError('与游戏通信失败（端口不可用）');
     }
@@ -451,6 +470,7 @@ export const frontendUi: Plugin = {
       window.removeEventListener('pointerup', onPointerUp, true);
       canvas?.removeEventListener('contextmenu', onCanvasContextMenu);
       if (port) port.onmessage = null;
+      delete (window as unknown as Record<string, unknown>).__II_TEST_TECH__;
       cancelDrag();
       shell.remove();
       style.remove();

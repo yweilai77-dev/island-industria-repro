@@ -61,6 +61,8 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.resource, 'plugin/resource')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.build, 'plugin/build')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.inventory, 'plugin/inventory')) },
+          // P2-E1 科技树：只依赖 inventory；必须早于所有门控使用者（mechanical/ports/assembly）。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.tech, 'plugin/tech')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.gameUiBridge, 'plugin/game-ui-bridge')) },
           { $asset: guidText(assetGuid(PACKAGE_IDS.harvest, 'plugin/harvest')) },
           // 机械系统最后挂载：需要 inventory/hotbar/spatial/player 已就绪。

@@ -13,8 +13,10 @@ import {
   parseUiCommand,
   stateSignature,
   type UiErrorMessage,
+  type UiHelloFlags,
   type UiStateMessage,
 } from './protocol.ts';
+import type { TechSnapshot } from '../tech/types.ts';
 import { buildGoalView, goalViewSignature, type UiGoalState } from './goal-view.ts';
 
 const SYSTEM_NAME = 'island-industria/game-ui-bridge';
@@ -56,8 +58,32 @@ export const gameUiBridge: Plugin = {
         return null;
       }
     };
+    // P2-E1：科技快照随状态一起下发（E1 只读；E2 科技页复用同一字段）。
+    const readTech = (): TechSnapshot | null => {
+      try {
+        return ctx.get('tech')?.snapshot() ?? null;
+      } catch (error) {
+        console.error('M2.0: failed to read tech snapshot', error);
+        return null;
+      }
+    };
+    const techRevision = (): number => ctx.get('tech')?.revision() ?? -1;
     const signatureWithGoal = (goal: UiGoalState | null): string =>
-      stateSignature(definitions, countOf, hotbar.revision) + '|' + goalViewSignature(goal);
+      stateSignature(definitions, countOf, hotbar.revision)
+      + '|' + goalViewSignature(goal)
+      + '|tech:' + String(techRevision());
+
+    /** hello 携带的测试启动标志：legacy 兼容模式（只由验收脚本通过前端 flags 设置）。 */
+    let pendingFlags: UiHelloFlags | null = null;
+    const applyFlags = (flags: UiHelloFlags | undefined): void => {
+      if (flags === undefined) return;
+      pendingFlags = flags;
+      const tech = ctx.get('tech');
+      if (!tech) return; // 服务未就绪时留到下一帧重试（见 Update 系统）
+      if (flags.progression === 'legacy') tech.setMode('legacy');
+      else if (flags.progression === 'player') tech.setMode('player');
+      pendingFlags = null;
+    };
 
     const sendState = (): void => {
       revision += 1;
@@ -69,6 +95,7 @@ export const gameUiBridge: Plugin = {
         slots: hotbar.slots,
         selected: hotbar.selected,
         goal,
+        tech: readTech(),
       });
       lastSignature = signatureWithGoal(goal);
       try {
@@ -98,9 +125,44 @@ export const gameUiBridge: Plugin = {
       try {
         switch (command.type) {
           case 'hello':
+            applyFlags(command.flags);
+            sendState();
+            return;
           case 'state/request':
             sendState();
             return;
+          case 'tech/submit': {
+            const tech = ctx.get('tech');
+            if (!tech) {
+              sendError('tech-unavailable', 'technology service is not ready');
+              return;
+            }
+            const result = tech.submit(command.nodeId, command.itemId, command.count);
+            if (!result.ok) sendError(result.code, `tech submit rejected: ${result.code}`);
+            sendState();
+            return;
+          }
+          case 'tech/submit-all': {
+            const tech = ctx.get('tech');
+            if (!tech) {
+              sendError('tech-unavailable', 'technology service is not ready');
+              return;
+            }
+            const result = tech.submitAll(command.nodeId);
+            if (!result.ok) sendError(result.code, `tech submit-all rejected: ${result.code}`);
+            sendState();
+            return;
+          }
+          case 'tech/track': {
+            const tech = ctx.get('tech');
+            if (!tech) {
+              sendError('tech-unavailable', 'technology service is not ready');
+              return;
+            }
+            if (!tech.track(command.nodeId)) sendError('unknown-node', 'unknown tech node');
+            sendState();
+            return;
+          }
           case 'hotbar/select':
             hotbar.select(command.slot);
             sendState();
@@ -139,6 +201,8 @@ export const gameUiBridge: Plugin = {
           name: SYSTEM_NAME,
           queries: [],
           fn: () => {
+            // 测试启动标志可能在 tech 服务就绪前到达：每帧重试一次。
+            if (pendingFlags !== null) applyFlags(pendingFlags ?? undefined);
             hotbar.dropUnavailable((itemId) => inventory.count(itemId));
             const goal = readGoal();
             const signature = signatureWithGoal(goal);

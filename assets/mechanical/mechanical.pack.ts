@@ -27,6 +27,13 @@ import type {} from '@forgeax/engine/app';
 import { FLOOR_MODE_KEY } from '../build/floors.ts';
 import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
 import { BUILD_TARGET_STATE_KEY, type BuildTargetState } from '../build/target.ts';
+import type {} from '../tech/tech.pack.ts';
+import {
+  INHERITED_WORKSHOP,
+  INHERITED_WORKSHOP_DEFAULT_SLOT,
+  INHERITED_WORKSHOP_SLOTS,
+} from '../tech/start-kit.ts';
+import type { TechProgressionMode } from '../tech/types.ts';
 import {
   PROTOTYPE_KIT,
   PROTOTYPE_KIT_SLOTS,
@@ -61,7 +68,7 @@ export interface MechanicalService {
   partAt(cell: { gx: number; gz: number }, level: number): MechanicalPart | undefined;
   /** 事务化的位置更新（A 阶段不暴露 G，留给 B 的搬动/旋转）。 */
   updatePlacement(partId: number, next: Placement): boolean;
-  /** 结构模块等外部系统使用的放置前校验（只校验，不消耗物品）。 */
+  /** 结构模块等外部系统使用的放置前校验（只校验，不消耗物品；含科技门控）。 */
   canPlacePart(definitionId: PartId, placement: Placement): boolean;
   /** 借现有机械事务放置一个零件：校验 + registry + 空间 + 视图 + 消耗物品。 */
   placePart(definitionId: PartId, placement: Placement): boolean;
@@ -94,7 +101,7 @@ function partIdFromStructureId(id: string): number | undefined {
 
 export const mechanicalSystem: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'assets', 'gameScene', 'player', 'hotbar', 'inventory', 'spatial', 'resourceNodes', 'executionBootstrapHost'],
+  inject: ['world', 'assets', 'gameScene', 'player', 'hotbar', 'inventory', 'spatial', 'resourceNodes', 'executionBootstrapHost', 'tech'],
   apply(ctx) {
     const world = ctx.world;
     const assets = ctx.assets;
@@ -106,6 +113,7 @@ export const mechanicalSystem: Plugin = {
     const spatial = ctx.spatial;
     const resourceNodes = ctx.resourceNodes;
     const bootstrapHost = ctx.executionBootstrapHost;
+    const tech = ctx.tech;
 
     ctx.effect(function* () {
       const viewAssets: MechanicalViewAssets = createMechanicalViewAssets(assets);
@@ -125,19 +133,37 @@ export const mechanicalSystem: Plugin = {
       hideGhost(invalidGhost);
       hideGhost(selection);
 
-      const grantKit = (): void => {
+      // P2-E1：正式起步包（继承工坊）。旧 PROTOTYPE_KIT 只保留给 legacy 兼容模式。
+      let kitMode: TechProgressionMode = 'player';
+      const grantStarterKit = (): void => {
         if (world.hasResource(KIT_GRANTED_KEY)) return;
-        // 槽位表见 PROTOTYPE_KIT_SLOTS：0-4 保持 M1.7 顺序，5 保持空槽，6-11 是新零件。
+        for (const entry of INHERITED_WORKSHOP) inventory.add(entry.itemId, entry.count);
+        for (const binding of INHERITED_WORKSHOP_SLOTS) hotbar.bind(binding.slot, binding.itemId);
+        // 默认选中空槽（索引 5），保留 M1.5 的普通建造默认行为。
+        hotbar.select(INHERITED_WORKSHOP_DEFAULT_SLOT);
+        world.insertResource(KIT_GRANTED_KEY, 1);
+      };
+      /**
+       * legacy 兼容模式（仅旧 M1/P2 验收脚本）：
+       * 把正式起步包换成历史原型套件，并把快捷栏恢复为历史槽位表。
+       * 只在世界启动阶段被调用（脚本刚 reload，尚未建造任何东西）。
+       */
+      const switchToLegacyKit = (): void => {
+        if (kitMode === 'legacy') return;
+        for (const entry of INHERITED_WORKSHOP) {
+          const have = inventory.count(entry.itemId);
+          if (have > 0) inventory.remove(entry.itemId, Math.min(have, entry.count));
+        }
+        for (let slot = 0; slot < HOTBAR_SLOT_COUNT; slot += 1) hotbar.unbind(slot);
         for (const { slot, id } of PROTOTYPE_KIT_SLOTS) {
           const definition = MECHANICAL_PART_DEFS[id];
           inventory.add(definition.itemId, PROTOTYPE_KIT[id]);
           if (slot < HOTBAR_SLOT_COUNT) hotbar.bind(slot, definition.itemId);
         }
-        // 默认选中空槽（索引 5），保留 M1.5 的普通建造默认行为；按 1-5 进入机械模式。
         hotbar.select(5);
-        world.insertResource(KIT_GRANTED_KEY, 1);
+        kitMode = 'legacy';
       };
-      grantKit();
+      grantStarterKit();
 
       const partAt = (cell: { gx: number; gz: number }, level: number): MechanicalPart | undefined => {
         for (const collider of spatial.structures.all()) {
@@ -231,7 +257,10 @@ export const mechanicalSystem: Plugin = {
 
       const selectedItem = (): ReturnType<typeof partDefForItem> => {
         const itemId = hotbar.slots[hotbar.selected] ?? null;
-        return partDefForItem(itemId);
+        const definition = partDefForItem(itemId);
+        if (definition === undefined) return undefined;
+        // 科技门控：未解锁零件的持有物品也不能进入放置模式（防绕过）。
+        return tech.isPartUnlocked(definition.id) ? definition : undefined;
       };
 
       const currentLevel = (): number | undefined => {
@@ -300,6 +329,8 @@ export const mechanicalSystem: Plugin = {
       };
 
       const place = (definition: MechanicalPartDef, placement: Placement): boolean => {
+        // 科技门控（业务入口，不是 UI 隐藏）：未解锁的机器/结构不允许放置。
+        if (!tech.isPartUnlocked(definition.id)) return false;
         if (!inventory.has(definition.itemId, 1)) return false;
         const partId = registry.allocateId();
         const part: MechanicalPart = { id: partId, def: definition, placement };
@@ -335,6 +366,7 @@ export const mechanicalSystem: Plugin = {
       const canPlacePart = (definitionId: PartId, placement: Placement): boolean => {
         const definition = MECHANICAL_PART_DEFS[definitionId];
         if (!definition) return false;
+        if (!tech.isPartUnlocked(definitionId)) return false;
         return validPlacement(definition, placement);
       };
 
@@ -342,6 +374,7 @@ export const mechanicalSystem: Plugin = {
       const placePart = (definitionId: PartId, placement: Placement): boolean => {
         const definition = MECHANICAL_PART_DEFS[definitionId];
         if (!definition) return false;
+        if (!tech.isPartUnlocked(definitionId)) return false;
         if (!validPlacement(definition, placement)) return false;
         return place(definition, placement);
       };
@@ -420,6 +453,8 @@ export const mechanicalSystem: Plugin = {
         after: [BUILD_SYSTEM_NAME],
         queries: [],
         fn: () => {
+          // P2-E1：legacy 兼容模式由测试脚手架设置；首次生效时把正式起步包换成历史原型套件。
+          if (tech.mode() === 'legacy') switchToLegacyKit();
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
           // 楼层建造模式（M1.8-A）与结构模块放置模式（P2-D）：其它输入系统让出输入。
           if (world.hasResource(FLOOR_MODE_KEY) || world.hasResource(STRUCTURE_MODE_KEY)) {

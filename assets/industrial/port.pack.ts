@@ -13,6 +13,8 @@ import { FLOOR_MODE_KEY } from '../build/floors.ts';
 import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
 import { BUILD_SYSTEM_NAME } from '../build/target.ts';
 import type {} from '../mechanical/mechanical.pack.ts';
+import type {} from '../tech/tech.pack.ts';
+import type { TechCapabilityId } from '../tech/types.ts';
 import { isProductionMachine, type MechanicalPart } from '../mechanical/parts.ts';
 import { coreForPart } from './catalog.ts';
 import { PACKAGE_IDS } from '../shared/asset-refs.ts';
@@ -64,13 +66,14 @@ interface EquippedPortWindow {
 
 export const industrialPorts: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'assets', 'mechanical', 'inventory'],
+  inject: ['world', 'assets', 'mechanical', 'inventory', 'tech'],
   apply(ctx) {
     const world = ctx.world;
     const assets = ctx.assets;
     if (!assets) throw new Error('port system requires asset service');
     const mechanical = ctx.mechanical;
     const inventory = ctx.inventory;
+    const tech = ctx.tech;
 
     ctx.effect(function* () {
       const runtime = new PortRuntime();
@@ -82,12 +85,12 @@ export const industrialPorts: Plugin = {
         links.clear();
       };
 
-      const grantKit = (): void => {
+      // P2-E1：接口盒不再作为开局套件发放；只有 legacy 兼容模式（旧验收脚本）才补发。
+      const grantLegacyKit = (): void => {
         if (world.hasResource(PORT_KIT_KEY)) return;
         for (const [itemId, count] of PORT_KIT) inventory.add(itemId, count);
         world.insertResource(PORT_KIT_KEY, 1);
       };
-      grantKit();
 
       const sceneOf = (parts: readonly MechanicalPart[] = mechanical.parts()): LinkScene => {
         const byId = new Map<number, MechanicalPart>();
@@ -124,13 +127,22 @@ export const industrialPorts: Plugin = {
         return part;
       };
 
-      /** 安装一个接口盒：先确认背包有货 → 运行时校验 → 成功后才扣物品。 */
+      /** 每个动作对应的科技能力门控（业务入口检查，不是 UI 隐藏）。 */
+      const capabilityOf = (moduleId: PortModuleId, role: 'input' | 'output'): TechCapabilityId => {
+        if (moduleId === 'port.through') return role === 'input' ? 'port-input-install' : 'port-output-install';
+        if (moduleId === 'port.output') return 'port-output-install';
+        return 'split-merge';
+      };
+
+      /** 安装一个接口盒：科技门控 → 背包有货 → 运行时校验 → 成功后才扣物品。 */
       const installModule = (part: MechanicalPart, moduleId: PortModuleId, role: 'input' | 'output'): void => {
         const core = coreForPart(part.def.id);
         if (!core) return;
         const module = portModuleOfId(moduleId);
         if (!module || module.itemId === null) return;
         if (!module.fitsSlotRoles.includes(role)) return;
+        if (!tech.isPortUnlocked(module.id)) return;
+        if (!tech.hasCapability(capabilityOf(moduleId, role))) return;
         const slot = role === 'input'
           ? runtime.freeInputSlotOf(core, part.id)
           : runtime.freeOutputSlotOf(core, part.id);
@@ -158,6 +170,7 @@ export const industrialPorts: Plugin = {
 
       /** J：第一次选中上游输出接口；第二次连到下游输入接口；点回源头取消。 */
       const linkAction = (part: MechanicalPart): void => {
+        if (!tech.hasCapability('material-link')) return;
         const outputs = runtime.outputBoxesOf(part.id);
         if (armed) {
           if (armed.partId === part.id && outputs.some((port) => port.slot.id === armed?.slotId)) {
@@ -182,6 +195,7 @@ export const industrialPorts: Plugin = {
 
       /** H：解除悬停核心上所有端口上的物料连接（先解输入侧，再解输出侧）。 */
       const unlink = (part: MechanicalPart): number => {
+        if (!tech.hasCapability('material-link')) return 0;
         let removed = 0;
         for (const port of runtime.inputBoxesOf(part.id)) removed += links.removeAt(part.id, port.slot.id);
         for (const port of runtime.outputBoxesOf(part.id)) removed += links.removeAt(part.id, port.slot.id);
@@ -202,6 +216,8 @@ export const industrialPorts: Plugin = {
         after: [BUILD_SYSTEM_NAME],
         queries: [],
         fn: () => {
+          // P2-E1：legacy 兼容模式补发历史接口盒套件（正式流程没有任何接口盒开局供给）。
+          if (tech.mode() === 'legacy') grantLegacyKit();
           const parts = mechanical.parts();
           const alive = new Set(parts.map((part) => part.id));
           // 机器被拆掉：接口盒与盒内物料交回库存，连接一并清除（不丢物品）。

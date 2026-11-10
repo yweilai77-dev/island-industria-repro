@@ -56,7 +56,7 @@ export {
  */
 export const mechanicalRuntime: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory', 'ports', 'assembly'],
+  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory', 'ports', 'assembly', 'tech'],
   apply(ctx) {
     const world = ctx.world;
     const mechanical = ctx.mechanical;
@@ -64,6 +64,7 @@ export const mechanicalRuntime: Plugin = {
     const hotbar = ctx.hotbar;
     const inventory = ctx.inventory;
     const ports = ctx.ports;
+    const tech = ctx.tech;
     const player = ctx.player;
     const assets = ctx.assets;
     if (!assets) throw new Error('mechanical runtime requires asset service');
@@ -80,6 +81,8 @@ export const mechanicalRuntime: Plugin = {
         partAt: (cell, level) => mechanical.partAt(cell, level),
         addItem: (itemId, count) => { inventory.add(itemId, count); },
         ports: portFlow,
+        // P2-E1：配方门控走科技服务；未启用科技时配方表不变（旧单测/legacy 模式）。
+        isRecipeUnlocked: (recipeId) => tech.isRecipeUnlocked(recipeId),
       });
       // M2.0-P1-B：只读目标进度服务（每帧用真实快照刷新；不对外暴露 update）。
       const goalProgress = createGoalProgress();
@@ -134,6 +137,9 @@ export const mechanicalRuntime: Plugin = {
           links: ports.links(),
           // P2-D：组合机械（成员核心保持独立 ID；这里只是结构组织视图）。
           assemblies: assembly.snapshot(),
+          // P2-E1：科技树只读快照（节点状态/交付进度/解锁集合/追踪目标/进度模式）。
+          // 仍然只有唯一 read `mechanical`，不新增第二个 GameRead。
+          tech: tech.snapshot(),
           inventory: inventorySnapshot,
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],

@@ -38,4 +38,6 @@ export const PACKAGE_IDS = Object.freeze({
   floors: definePackageId('019fbf00-5a00-7000-8000-000000000000'),
   // M2.0-P2-B 工业接口盒（安装位运行时 + 世界表现）
   industrial: definePackageId('019fbf00-5b00-7000-8000-000000000000'),
+  // M2.0-P2-E1 科技树（数据/状态/门控插件）
+  tech: definePackageId('019fbf00-5c00-7000-8000-000000000000'),
 });

@@ -26,6 +26,7 @@ import type {} from '../player/player.ts';
 import type {} from '../inventory/inventory.ts';
 import type {} from '../spatial/service.ts';
 import type {} from '../mechanical/mechanical.pack.ts';
+import type {} from '../tech/tech.pack.ts';
 import { structureModuleForItem } from './assembly-module.ts';
 import { AssemblyRuntime, structurePlacementIssue } from './assembly-runtime.ts';
 import type { AssemblySnapshot } from './assembly-runtime.ts';
@@ -77,7 +78,7 @@ export const industrialAssembly: Plugin = {
   name: SYSTEM_NAME,
   inject: [
     'world', 'assets', 'mechanical', 'inventory', 'player', 'spatial',
-    'resourceNodes', 'gameScene', 'executionBootstrapHost',
+    'resourceNodes', 'gameScene', 'executionBootstrapHost', 'tech',
   ],
   apply(ctx) {
     const world = ctx.world;
@@ -85,6 +86,7 @@ export const industrialAssembly: Plugin = {
     if (!assets) throw new Error('assembly system requires asset service');
     const mechanical = ctx.mechanical;
     const inventory = ctx.inventory;
+    const tech = ctx.tech;
     const player = ctx.player;
     const spatial = ctx.spatial;
     const bootstrapHost = ctx.executionBootstrapHost;
@@ -92,11 +94,12 @@ export const industrialAssembly: Plugin = {
 
     ctx.effect(function* () {
       const runtime = new AssemblyRuntime();
-      // 原型供给（真实物品；P2-E 会统一决定最终获取/解锁方式，这里明确标记为临时原型数量）。
-      if (!world.hasResource(KIT_GRANTED_KEY)) {
+      // P2-E1：结构框架不再作为开局套件发放；只有 legacy 兼容模式（旧验收脚本）才补发原始数量。
+      const grantLegacyKit = (): void => {
+        if (world.hasResource(KIT_GRANTED_KEY)) return;
         inventory.add(ITEM_IDS.STRUCTURE_FRAME, STRUCTURE_KIT_COUNT);
         world.insertResource(KIT_GRANTED_KEY, 1);
-      }
+      };
 
       const ghostBox = assets.create(createBoxGeometry(1, 1, 1).unwrap()).unwrap();
       const boundaryBox = assets.create(createBoxGeometry(1, 1, 1).unwrap()).unwrap();
@@ -243,6 +246,9 @@ export const industrialAssembly: Plugin = {
       };
 
       const placeFrameAt = (placement: Placement): boolean => {
+        // 科技门控：结构模块本身与组合机械能力都必须已解锁（业务入口检查）。
+        if (!tech.isStructureUnlocked(frameModule.id)) return false;
+        if (!tech.hasCapability('assembly')) return false;
         const placed = mechanical.placePart(frameModule.partId, placement);
         if (!placed) return false;
         runtime.reconcile(mechanical.parts());
@@ -254,14 +260,17 @@ export const industrialAssembly: Plugin = {
         after: [BUILD_SYSTEM_NAME],
         queries: [],
         fn: () => {
+          // P2-E1：legacy 兼容模式补发历史结构框架套件（正式流程必须靠 T2.5 解锁后制造）。
+          if (tech.mode() === 'legacy') grantLegacyKit();
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
           const floorMode = world.hasResource(FLOOR_MODE_KEY);
           if (floorMode && modeActive) setMode(false);
 
+          const assemblyUnlocked = tech.hasCapability('assembly') && tech.isStructureUnlocked(frameModule.id);
           if (!floorMode && input.keyboard.justPressedCode('KeyP')) {
             if (modeActive) {
               setMode(false);
-            } else if (inventory.has(ITEM_IDS.STRUCTURE_FRAME, 1)) {
+            } else if (assemblyUnlocked && inventory.has(ITEM_IDS.STRUCTURE_FRAME, 1)) {
               setMode(true);
             }
           }
@@ -288,10 +297,11 @@ export const industrialAssembly: Plugin = {
           const placement = createPlacement(support.cell.gx, support.cell.gz, frameModule.footprint.w,
             frameModule.footprint.d, 0, level as number);
           const hasItem = inventory.has(ITEM_IDS.STRUCTURE_FRAME, 1);
+          const unlocked = tech.isStructureUnlocked(frameModule.id) && tech.hasCapability('assembly');
           const basic = hasItem && mechanical.canPlacePart(frameModule.partId, placement);
           const adjacent = structurePlacementIssue(placement, frameModule, parts) === null;
-          const valid = basic && adjacent;
-          const reason = !hasItem ? 'no-item' : !basic ? 'occupied' : !adjacent ? 'not-adjacent' : null;
+          const valid = unlocked && basic && adjacent;
+          const reason = !unlocked ? 'locked' : !hasItem ? 'no-item' : !basic ? 'occupied' : !adjacent ? 'not-adjacent' : null;
           target = {
             active: true,
             cell: { gx: support.cell.gx, gz: support.cell.gz },

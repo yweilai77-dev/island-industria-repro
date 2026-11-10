@@ -3,6 +3,21 @@ import type { MechanicalPartDef } from '../mechanical/parts.ts';
 import { primaryInputOf, primaryOutputOf, recipesFor, type Recipe } from './recipes.ts';
 
 /**
+ * P2-E1 科技门控谓词：返回该配方当前是否已解锁。
+ * 缺省（undefined）= 全部可用，保持旧单测与 legacy 兼容模式的行为不变。
+ */
+export type RecipeFilter = (recipeId: string) => boolean;
+
+/** 机器当前可用的配方列表（按解锁过滤；顺序与 `recipesFor` 一致，不做重排）。 */
+export function availableRecipesFor(
+  partId: MechanicalPartDef['id'],
+  isUnlocked?: RecipeFilter,
+): readonly Recipe[] {
+  const list = recipesFor(partId);
+  return isUnlocked ? list.filter((recipe) => isUnlocked(recipe.id)) : list;
+}
+
+/**
  * M1.8-C 加工机器状态机（纯逻辑、零引擎依赖）。
  *
  * 规则（全部可单测，不依赖引擎）：
@@ -17,6 +32,9 @@ export type MachineBlockReason = 'ok' | 'no-power' | 'no-input' | 'output-full' 
 
 export interface MachineState {
   readonly partId: number;
+  /** 当前选中的配方 ID（权威；E1 起用它判断「切换后仍是同一条配方」）。 */
+  recipeId: string | null;
+  /** 兼容字段：配方在完整配方表中的下标（旧断言/旧快照仍使用）。 */
   recipeIndex: number;
   /** 当前周期进度 0..1；1 表示「已完成但输出被堵住」。 */
   progress: number;
@@ -46,6 +64,7 @@ export function outputCapacity(def: MechanicalPartDef): number {
 export function createMachineState(partId: number): MachineState {
   return {
     partId,
+    recipeId: null,
     recipeIndex: 0,
     progress: 0,
     inputItem: null,
@@ -58,12 +77,34 @@ export function createMachineState(partId: number): MachineState {
   };
 }
 
-/** 当前生效的配方；机器没有配方时返回 undefined。 */
-export function activeRecipe(state: MachineState, def: MechanicalPartDef): Recipe | undefined {
+/** 当前生效的配方；机器没有（或没有已解锁的）配方时返回 undefined。 */
+export function activeRecipe(
+  state: MachineState,
+  def: MechanicalPartDef,
+  isUnlocked?: RecipeFilter,
+): Recipe | undefined {
   const list = recipesFor(def.id);
   if (list.length === 0) return undefined;
+  const allowed = (recipe: Recipe): boolean => isUnlocked === undefined || isUnlocked(recipe.id);
+  if (state.recipeId !== null) {
+    const byId = list.find((recipe) => recipe.id === state.recipeId);
+    if (byId !== undefined && allowed(byId)) return byId;
+  }
   const index = Math.min(Math.max(state.recipeIndex, 0), list.length - 1);
-  return list[index];
+  const byIndex = list[index];
+  if (byIndex !== undefined && allowed(byIndex)) return byIndex;
+  return availableRecipesFor(def.id, isUnlocked)[0];
+}
+
+/** 保证机器选中一条已解锁配方（新机器/解锁集合变化后调用；不改变进度）。 */
+export function ensureRecipeSelected(
+  state: MachineState,
+  def: MechanicalPartDef,
+  isUnlocked?: RecipeFilter,
+): void {
+  const current = activeRecipe(state, def, isUnlocked);
+  state.recipeId = current?.id ?? null;
+  state.recipeIndex = current === undefined ? 0 : recipesFor(def.id).indexOf(current);
 }
 
 /** 缓冲里的原料是否是当前配方的原料类型（用于判断能否切换配方）。 */
@@ -76,18 +117,37 @@ export function canSwitchRecipe(state: MachineState): boolean {
   return state.progress === 0 && state.inputCount === 0;
 }
 
-/** 循环切到下一条配方；不允许时返回 false 且不改状态。 */
-export function cycleRecipe(state: MachineState, def: MechanicalPartDef): boolean {
+/**
+ * 循环切到下一条**已解锁**配方；不允许时返回 false 且不改状态。
+ * 未解锁配方被跳过（完整配方表顺序不变，保护既有下标与存档）。
+ */
+export function cycleRecipe(
+  state: MachineState,
+  def: MechanicalPartDef,
+  isUnlocked?: RecipeFilter,
+): boolean {
   const list = recipesFor(def.id);
   if (list.length <= 1) return false;
   if (!canSwitchRecipe(state)) return false;
-  state.recipeIndex = (state.recipeIndex + 1) % list.length;
-  return true;
+  const current = activeRecipe(state, def, isUnlocked);
+  const currentIndex = current === undefined ? -1 : list.indexOf(current);
+  for (let step = 1; step <= list.length; step += 1) {
+    const next = list[(currentIndex + step + list.length) % list.length];
+    if (isUnlocked !== undefined && !isUnlocked(next.id)) continue;
+    state.recipeId = next.id;
+    state.recipeIndex = list.indexOf(next);
+    return true;
+  }
+  return false;
 }
 
-/** 该机器当前接受的原料类型；没有配方返回 undefined。 */
-export function acceptedInputOf(state: MachineState, def: MechanicalPartDef): ItemId | undefined {
-  const recipe = activeRecipe(state, def);
+/** 该机器当前接受的原料类型；没有可用配方返回 undefined。 */
+export function acceptedInputOf(
+  state: MachineState,
+  def: MechanicalPartDef,
+  isUnlocked?: RecipeFilter,
+): ItemId | undefined {
+  const recipe = activeRecipe(state, def, isUnlocked);
   return recipe ? primaryInputOf(recipe)?.itemId : undefined;
 }
 
@@ -100,9 +160,10 @@ export function insertInput(
   def: MechanicalPartDef,
   itemId: ItemId,
   count: number,
+  isUnlocked?: RecipeFilter,
 ): number {
   if (!Number.isInteger(count) || count <= 0) return 0;
-  const accepted = acceptedInputOf(state, def);
+  const accepted = acceptedInputOf(state, def, isUnlocked);
   if (accepted === undefined || accepted !== itemId) return 0;
   if (state.inputCount > 0 && state.inputItem !== itemId) return 0;
   const space = inputCapacity(def) - state.inputCount;
@@ -154,6 +215,8 @@ export interface MachineTickInput {
   /** 实际转速 / 额定转速（1 = 额定 60 RPM）。 */
   readonly rate: number;
   readonly delta: number;
+  /** 科技门控：该配方是否已解锁（缺省 = 全部解锁）。 */
+  readonly isUnlocked?: RecipeFilter;
 }
 
 /**
@@ -173,7 +236,7 @@ export function tickMachine(state: MachineState, input: MachineTickInput): boole
   }
 
   state.running = false;
-  const recipe = activeRecipe(state, def);
+  const recipe = activeRecipe(state, def, input.isUnlocked);
   if (!recipe) {
     state.block = 'no-recipe';
     return false;

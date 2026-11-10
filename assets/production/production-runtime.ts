@@ -3,15 +3,18 @@ import type { ItemId } from '../items/items.ts';
 import { isProductionMachine, type MechanicalPart, type MechanicalPartDef } from '../mechanical/parts.ts';
 import { recipesFor } from './recipes.ts';
 import {
+  activeRecipe,
+  acceptedInputOf,
+  availableRecipesFor,
   createMachineState,
   cycleRecipe,
+  ensureRecipeSelected,
   flushMachine,
   insertInput,
   takeOutput,
   tickMachine,
-  activeRecipe,
-  acceptedInputOf,
   type MachineState,
+  type RecipeFilter,
 } from './production.ts';
 import {
   acceptItem,
@@ -82,6 +85,8 @@ export interface ProductionRuntimeOptions {
   readonly addItem: (itemId: ItemId, count: number) => void;
   /** P2-B 接口盒网关；缺省表示该场景不支持自动输入。 */
   readonly ports?: PortFlowGateway;
+  /** P2-E1 科技门控：配方是否已解锁；缺省 = 全部解锁（旧单测/legacy 模式）。 */
+  readonly isRecipeUnlocked?: RecipeFilter;
 }
 
 export interface MachineSnapshot {
@@ -147,7 +152,12 @@ export class ProductionRuntime {
       seen.add(part.id);
       this.partMap.set(part.id, part);
       if (part.def.kind === 'machine' && isProductionMachine(part.def)) {
-        if (!this.machines.has(part.id)) this.machines.set(part.id, createMachineState(part.id));
+        if (!this.machines.has(part.id)) {
+          const next = createMachineState(part.id);
+          // 新机器默认选中第一条「已解锁」配方（未解锁配方不可见、不可切）。
+          ensureRecipeSelected(next, part.def, this.options.isRecipeUnlocked);
+          this.machines.set(part.id, next);
+        }
       }
       if (part.def.kind === 'transport') {
         if (!this.chutes.has(part.id)) this.chutes.set(part.id, createChuteState());
@@ -184,7 +194,7 @@ export class ProductionRuntime {
     const state = this.machines.get(partId);
     const part = this.partMap.get(partId);
     if (!state || !part) return 0;
-    return insertInput(state, part.def, itemId, count);
+    return insertInput(state, part.def, itemId, count, this.options.isRecipeUnlocked);
   }
 
   /**
@@ -198,10 +208,10 @@ export class ProductionRuntime {
     const state = this.machines.get(partId);
     const part = this.partMap.get(partId);
     if (!state || !part) return 0;
-    const accepted = acceptedInputOf(state, part.def);
+    const accepted = acceptedInputOf(state, part.def, this.options.isRecipeUnlocked);
     if (accepted === undefined) return 0;
     if (!io.has(accepted, 1)) return 0;
-    const inserted = insertInput(state, part.def, accepted, 1);
+    const inserted = insertInput(state, part.def, accepted, 1, this.options.isRecipeUnlocked);
     if (inserted <= 0) return 0;
     io.remove(accepted, inserted);
     return inserted;
@@ -219,7 +229,7 @@ export class ProductionRuntime {
     const state = this.machines.get(partId);
     const part = this.partMap.get(partId);
     if (!state || !part) return false;
-    return cycleRecipe(state, part.def);
+    return cycleRecipe(state, part.def, this.options.isRecipeUnlocked);
   }
 
   setPowerReading(partId: number, reading: PowerReading): void {
@@ -246,7 +256,10 @@ export class ProductionRuntime {
       if (!part) continue;
       // P2-B：先把输入接口盒里的物料推进机器输入缓冲，再推进加工。
       // 顺序保证「本帧到达的物料本帧就可能开工」，且 drain 内部是原子转移。
-      this.options.ports?.drain(partId, (itemId) => insertInput(state, part.def, itemId, 1) > 0);
+      this.options.ports?.drain(
+        partId,
+        (itemId) => insertInput(state, part.def, itemId, 1, this.options.isRecipeUnlocked) > 0,
+      );
     }
     // P2-C：机器输出缓冲 → 输出接口盒缓冲 → 物料连接（连接两端都是接口盒缓冲）。
     this.pullToOutputPorts();
@@ -307,9 +320,10 @@ export class ProductionRuntime {
       powered: reading.powered,
       rate: reading.rate,
       delta,
+      isUnlocked: this.options.isRecipeUnlocked,
     });
     if (!completed) return;
-    const recipe = activeRecipe(state, def);
+    const recipe = activeRecipe(state, def, this.options.isRecipeUnlocked);
     const out = recipe?.outputs[0];
     if (!out) return;
     this.producedTotals.set(out.itemId, (this.producedTotals.get(out.itemId) ?? 0) + out.count);
@@ -387,13 +401,15 @@ export class ProductionRuntime {
       .sort((a, b) => a[0] - b[0])
       .map(([partId, state]) => {
         const part = this.partMap.get(partId);
-        const recipe = part ? activeRecipe(state, part.def) : undefined;
+        const recipe = part ? activeRecipe(state, part.def, this.options.isRecipeUnlocked) : undefined;
+        const fullList = part ? recipesFor(part.def.id) : [];
+        const availableCount = part ? availableRecipesFor(part.def.id, this.options.isRecipeUnlocked).length : 0;
         return {
           partId,
           recipeId: recipe?.id ?? null,
           recipeLabel: recipe?.label ?? null,
-          recipeIndex: state.recipeIndex,
-          recipeCount: part ? recipesFor(part.def.id).length : 0,
+          recipeIndex: recipe === undefined ? 0 : fullList.indexOf(recipe),
+          recipeCount: availableCount,
           progress: state.progress,
           inputItem: state.inputItem,
           inputCount: state.inputCount,
