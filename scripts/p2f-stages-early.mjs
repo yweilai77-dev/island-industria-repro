@@ -110,6 +110,8 @@ export async function runEarlyStages(play, F) {
       for (let elapsed = 0; elapsed <= maxGame; elapsed += 4) {
         const now = await state();
         if (producedCount(now, itemId) >= target) return now;
+        // P2-E3 兼容性：每轮先维持动力（能量耗尽会让加工冻结，表现为「产出超时」）。
+        await F.ensurePower();
         await feeder(now);
         await play.advance(4);
       }
@@ -120,7 +122,7 @@ export async function runEarlyStages(play, F) {
     await F.feedMachine(crusherCell, crusherId, 4);
     await produceUntil('crushed_ore', 4, async (now) => {
       if (machineOf(now, crusherId).inputCount === 0) await F.feedMachine(crusherCell, crusherId, 4);
-    }, 'order crush', 60);
+    }, 'order crush', 100);
     await F.collectMachine(crusherCell, crusherId, 1);
     await F.feedMachine(smelterCell, smelterId, 4);
     await produceUntil('iron_ingot', 4, async (now) => {
