@@ -2,8 +2,11 @@
 // Run: pnpm exec forgeax project play scripts/playthrough.mjs --json --detail
 // 说明：本阶段不提供通用 read projection，位置/落点以截图与 DOM 背包读数为证据。
 
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   let yawIndex = 1; // 初始相机 yaw = 45°（INITIAL_YAW_INDEX=1）
 
   const assert = (condition, message) => {

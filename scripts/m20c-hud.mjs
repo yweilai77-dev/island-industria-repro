@@ -6,6 +6,7 @@
 // 1280x600 由 forgeax project play 的 viewports（默认 1280x720,1280x600）在脚本结束后
 // 自动截图并做 HUD layout 检查。
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 const SHAFT = 0;
 const GEAR12 = 1;
@@ -32,6 +33,7 @@ const LAYOUT = [
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const points = {};
   let cal;

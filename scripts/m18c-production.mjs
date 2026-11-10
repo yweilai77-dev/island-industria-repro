@@ -7,6 +7,7 @@
 // 断言：加工依赖动力；断轴时进度冻结；产物经溜槽真的进下一台机器；铁锭进库存；断轴/复电可恢复。
 import { createHarness } from './m18-helpers.mjs';
 import { runForgeStage } from './m18c-production-forge.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 const SHAFT = 0;
 const GEAR12 = 1;
@@ -35,6 +36,7 @@ const LAYOUT = [
 ];
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const assert = h.assert;
   const points = {};

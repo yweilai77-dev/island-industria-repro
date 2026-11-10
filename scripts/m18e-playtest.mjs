@@ -13,11 +13,13 @@
 //   4) 铁锭与碎铁矿的累计产量在持续运行中单调增长（说明产线真的在持续工作）。
 import productionRun from './m18c-production.mjs';
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 const TOTAL_MS = 15 * 60 * 1000;
 const PHASE2_MS = 13 * 60 * 1000;
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const startedAt = Date.now();
 
   // ---------------- 阶段 1：完整链路 ----------------

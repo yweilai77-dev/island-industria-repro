@@ -9,6 +9,7 @@
 // 注意：相机跟随玩家且初始 yaw 是 45°，所以每次移动玩家之后都要重新标定；
 //       移动方向由 m18-helpers 的 learnMovement() 实测四个方向键的世界向量后组合。
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 const FLYWHEEL = 8;
 const SHAFT = 0;
@@ -16,6 +17,7 @@ const VERTICAL = 7;
 const CRUSHER = 9;
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const assert = h.assert;
 

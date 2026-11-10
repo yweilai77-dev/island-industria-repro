@@ -1,6 +1,9 @@
 // M1.7-B acceptance playthrough
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const read = async (label) => {
     const s = await play.state('mechanical');
     console.log(label + '=' + JSON.stringify({

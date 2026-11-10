@@ -5,8 +5,11 @@
 //                                              └─ 12T(-3,6) → 冲压机 M2(-2,6)  负荷折算 40
 //   源侧总需求 = 20 + 40 + 40 = 100 N·m → 达到源容量 100，整网 stalled/source-overload。
 //   流程：先让主干运行（记录非零相位）→ 加负载过载 → 逐步卸载恢复 → 相位从冻结处继续。
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const snapshot = async () => play.state('mechanical');
   const read = async (label) => {

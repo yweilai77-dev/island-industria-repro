@@ -12,9 +12,11 @@ import { createHarness } from './m18-helpers.mjs';
 import { createOrderKit } from './m20-order-lib.mjs';
 import { runOrderPhaseA } from './m20-order-phase-a.mjs';
 import { runOrderPhaseB } from './m20-order-phase-b.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const kit = createOrderKit(play, h);
   await runOrderPhaseA(kit);

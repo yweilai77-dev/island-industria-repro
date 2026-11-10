@@ -2,8 +2,11 @@
 // 布局：源(-6,7) → 轴(-5,7) → 轴(-4,7) → 12T(-3,7)
 //   12T(-3,7) —同轴— 24T(-2,7) —啮合— 12T(-2,8) —同轴— 24T(-3,8) —啮合— 回到 12T(-3,7)
 //   这是一个传动比自洽的四齿轮闭环；M1.7-C 只支持树状网络，必须整组件 unsupported/cyclic-network。
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const snapshot = async () => play.state('mechanical');
   const read = async (label) => {

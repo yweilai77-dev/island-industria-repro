@@ -1,6 +1,9 @@
 // M1.7-C acceptance playthrough：齿轮传动比 + 负载减速 + 负载下降恢复
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const snapshot = async () => play.state('mechanical');
   const read = async (label) => {

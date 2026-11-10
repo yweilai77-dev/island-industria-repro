@@ -14,8 +14,10 @@ import { createHarness } from './m18-helpers.mjs';
 import { createCtx } from './p2c-links-lib.mjs';
 import { runSceneA } from './p2c-links-scene-a.mjs';
 import { runSceneB, runSceneC, runSceneF } from './p2c-links-scene-bcf.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const C = createCtx(play, h);
   await runSceneA(play, h, C);

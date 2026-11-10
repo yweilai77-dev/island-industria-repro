@@ -1,6 +1,9 @@
 // M1.7-A acceptance playthrough
+import { enterLegacyMode, waitForLegacy } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const readCounts = async () => {
     await play.keyboard.press('Tab');
     await play.wait(450);
@@ -154,6 +157,8 @@ export default async function playthrough(play) {
 
   await play.step('07-reload', async () => {
     await play.reload();
+    // legacy 模式由 page.addInitScript 注入，reload 后依然生效；等「模式 + 套件」就绪再断言。
+    await waitForLegacy(play);
     await play.wait(900);
     await play.screenshot('07-after-reload');
     const counts = await readCounts();

@@ -16,8 +16,10 @@ import { createP2dCtx } from './p2d-assembly-lib.mjs';
 import { runSceneAB } from './p2d-assembly-scene-ab.mjs';
 import { runSceneCDE } from './p2d-assembly-scene-cde.mjs';
 import { runSceneFG } from './p2d-assembly-scene-fg.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const C = createP2dCtx(play, h);
   await runSceneAB(play, h, C);

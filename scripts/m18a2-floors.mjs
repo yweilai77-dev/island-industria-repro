@@ -9,6 +9,7 @@
 //  2) 楼板可以行走，开孔格**走不进去**（空气墙，不掉下去）；
 //  3) 立式传动带能在开孔上放置并与上下两层轴连成同一动力网络。
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 const SHAFT = 0;
 const VERTICAL = 7;
@@ -30,6 +31,7 @@ const FLOORS = [
 ];
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const assert = h.assert;
   let cal;

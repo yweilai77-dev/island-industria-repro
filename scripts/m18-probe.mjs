@@ -1,8 +1,10 @@
 // M1.8 探针：只验证「屏幕↔格子标定 + 楼层结构放置」这条路能走通。
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
 
   await play.step('01-read-initial', async () => {

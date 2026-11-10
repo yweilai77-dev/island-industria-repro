@@ -4,8 +4,11 @@
 //       A 支路 24T 承载 = 20 + 20×2 = 60 > 齿轮承载 50 → 只停 A。
 //   B 支路（向下/远侧）：24T(-3,8) ─ 冲压机 MB(-2,8)，负载折算 10，正常运行。
 //   公共上游 12T 承载 = 60×0.5 + 20×0.5 = 40 ≤ 50，源侧需求 40 < 100 → 不停。
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const snapshot = async () => play.state('mechanical');
   const read = async (label) => {

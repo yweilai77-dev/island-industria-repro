@@ -16,8 +16,10 @@ import { createHarness } from './m18-helpers.mjs';
 import { createPortContext } from './p2b-ports-lib.mjs';
 import { runAbc } from './p2b-ports-phase-abc.mjs';
 import { runDef } from './p2b-ports-phase-def.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const h = createHarness(play);
   const C = createPortContext(play, h);
   await runAbc(play, h, C);

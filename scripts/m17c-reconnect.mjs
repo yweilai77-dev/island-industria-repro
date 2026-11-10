@@ -1,6 +1,9 @@
 // M1.7-C 补充验收：断轴后停止、重新放置传动轴后从冻结相位恢复
+import { enterLegacyMode } from './legacy-mode.mjs';
+
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  await enterLegacyMode(play);
   const assert = (condition, message) => { if (!condition) throw new Error(message); };
   const snapshot = async () => play.state('mechanical');
   const read = async (label) => {
