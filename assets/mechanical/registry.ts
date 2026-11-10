@@ -22,6 +22,19 @@ export class MechanicalRegistry {
     return id;
   }
 
+  /** 下一个可用零件 id（存档必须持久化，否则 sources/接口盒/连接引用会断）。 */
+  get nextPartId(): number {
+    return this.nextId;
+  }
+
+  /** 读档恢复计数器；调用方保证 value >= 已恢复最大 id + 1。 */
+  setNextPartId(value: number): void {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new RangeError(`nextPartId must be a positive integer, received ${String(value)}`);
+    }
+    this.nextId = value;
+  }
+
   add(part: MechanicalPart): boolean {
     if (this.parts.has(part.id)) return false;
     this.parts.set(part.id, part);
@@ -79,5 +92,6 @@ export class MechanicalRegistry {
     this.parts.clear();
     this.connectionsCache = [];
     this.committedRevision = 0;
+    this.nextId = 1;
   }
 }

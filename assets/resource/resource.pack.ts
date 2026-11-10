@@ -7,6 +7,7 @@ import { Materials, MeshFilter, MeshRenderer } from '@forgeax/engine/render';
 import { ChildOf, Name, Transform } from '@forgeax/engine/scene';
 import { ok, type AssetHandle } from '@forgeax/engine/types';
 import { PACKAGE_IDS } from '../shared/asset-refs.ts';
+import { normalizeResourceSlice } from '../save/save-schema.ts';
 import { placementCenter } from '../grid/grid.ts';
 import {
   IRON_ORE_MAX_AMOUNT,
@@ -173,6 +174,26 @@ export const ironOreResource: Plugin = {
           }
           applyVisual(node);
           return { deducted, remaining: node.amount };
+        },
+        snapshot: () => nodes
+          .map((node) => ({ id: node.id, amount: node.amount, depleted: node.depleted }))
+          .sort((a, b) => a.id - b.id),
+        restore: (raw: unknown) => {
+          const normalized = normalizeResourceSlice(raw);
+          const issues = [...normalized.issues];
+          let restored = 0;
+          for (const record of normalized.value) {
+            const node = nodes.find((candidate) => candidate.id === record.id);
+            if (node === undefined) {
+              issues.push('unknown resource node skipped: ' + record.id);
+              continue;
+            }
+            node.amount = record.amount;
+            node.depleted = record.amount <= 0;
+            applyVisual(node);
+            restored += 1;
+          }
+          return { restored, issues };
         },
       };
       yield ctx.provide('resourceNodes', service);

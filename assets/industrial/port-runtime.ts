@@ -166,6 +166,38 @@ export class PortRuntime {
     return { ok: true };
   }
 
+  /**
+   * 读档恢复一个接口盒（含盒内缓冲）：不碰库存，调用方已确认零件/核心/物品合法。
+   * 失败返回原因字符串，成功返回 undefined。缓冲按安装位容量钳制，绝不越界。
+   */
+  restore(
+    partId: number,
+    core: ProcessingCoreDef,
+    slotId: PortSlotId,
+    moduleId: PortModuleId,
+    buffer: { readonly itemId: ItemId | null; readonly count: number },
+  ): string | undefined {
+    const verdict = this.install(partId, core, slotId, moduleId);
+    if (!verdict.ok) return verdict.reason ?? 'install-failed';
+    const port = this.get(partId, slotId);
+    if (!port) return 'install-lost';
+    const rawCount = Number.isFinite(buffer.count) ? Math.floor(buffer.count) : 0;
+    const count = Math.max(0, Math.min(port.slot.capacity, rawCount));
+    if (buffer.itemId === null || count <= 0) {
+      port.itemId = null;
+      port.count = 0;
+      return rawCount > 0 ? 'buffer-item-missing' : undefined;
+    }
+    if (rawCount !== count) {
+      port.itemId = buffer.itemId;
+      port.count = count;
+      return 'buffer-count-clamped';
+    }
+    port.itemId = buffer.itemId;
+    port.count = count;
+    return undefined;
+  }
+
   /** 拆卸：移除接口盒并把盒里剩下的物料一并交回（永不静默销毁）。 */
   remove(partId: number, slotId: PortSlotId): PortRemoval | undefined {
     const slots = this.byPart.get(partId);

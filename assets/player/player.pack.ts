@@ -7,10 +7,14 @@ import { Materials, MeshFilter, MeshRenderer } from '@forgeax/engine/render';
 import { ChildOf, PROPAGATE_TRANSFORMS_SYSTEM, Transform } from '@forgeax/engine/scene';
 import { ok } from '@forgeax/engine/types';
 import { PACKAGE_IDS, assetGuid, guidText } from '../shared/asset-refs.ts';
-import { cellToCenter } from '../grid/grid.ts';
+import { cellToCenter, worldToCell } from '../grid/grid.ts';
 import { BUILD_ADJUSTING_KEY } from '../build/adjustment.ts';
-import { blocksPlayerMove } from './occupancy.ts';
+import { blocksPlayerMove, overlapsPlayer } from './occupancy.ts';
 import type {} from '../spatial/service.ts';
+import { isInsideStair, stairStepIndexAt, stairSurfaceStepTopY } from '../spatial/structures.ts';
+import { levelBaseY } from '../spatial/space.ts';
+import { normalizePlayerSlice } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 import {
   FLAT_SWITCH_TOLERANCE,
   resolveWithSliding,
@@ -106,7 +110,86 @@ export const playerMarker: Plugin = {
       world.insertResource(PLAYER_STATE_KEY, state);
       yield () => world.removeResource(PLAYER_STATE_KEY);
 
-      yield ctx.provide('player', { entity: root, cell, facing: 'north', state });
+      // ---- 读档：恢复到存档位置（一次垂直解算，避免卡进建筑/悬空） ----
+      const spawnCenter = cellToCenter(PLAYER_START_CELL);
+      const spawnSupport = selectFlatSupport(
+        spatial.supports.supportsAtPoint(spawnCenter[0], spawnCenter[2]),
+        null,
+        0,
+        FLAT_SWITCH_TOLERANCE,
+      );
+      const resolveStanding = (
+        x: number,
+        z: number,
+        level: number,
+      ): { x: number; z: number; feetY: number; level: number; supportId: string } | undefined => {
+        const flat = [...spatial.supports.supportsAtPoint(x, z)]
+          .filter((surface) => surface.active && surface.walkable && surface.level === level)
+          .sort((a, b) => Math.abs(a.worldY - levelBaseY(level)) - Math.abs(b.worldY - levelBaseY(level))
+            || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+        if (flat !== undefined) {
+          return { x, z, feetY: flat.worldY, level: flat.level, supportId: flat.id };
+        }
+        const stairs = spatial.traversals.all().filter(
+          (surface) => surface.walkable && isInsideStair(x, z, surface),
+        );
+        const stair = stairs.length === 1 ? stairs[0] : undefined;
+        if (stair !== undefined && level === stair.levelLow) {
+          const index = stairStepIndexAt(x, z, stair);
+          if (index !== undefined) {
+            return { x, z, feetY: stairSurfaceStepTopY(stair, index), level: stair.levelLow, supportId: stair.id };
+          }
+        }
+        return undefined;
+      };
+      const blockedAt = (x: number, feetY: number, z: number): boolean =>
+        spatial.structures.all().some(
+          (collider) => collider.blocksPlayer && overlapsPlayer(collider.aabb, x, feetY, z),
+        );
+      const applySavedPosition = (
+        target: { x: number; z: number; feetY: number; level: number; supportId: string },
+        yaw: number,
+      ): void => {
+        state.position[0] = target.x;
+        state.position[1] = target.feetY;
+        state.position[2] = target.z;
+        state.level = target.level;
+        state.supportId = target.supportId;
+        state.facingYaw = yaw;
+        const nextCell = worldToCell(target.x, target.z);
+        cell.gx = nextCell.gx;
+        cell.gz = nextCell.gz;
+        const rotation = quat.fromAxisAngle(quat.create(), [0, 1, 0], yaw);
+        world.set(root, Transform, {
+          pos: [target.x, target.feetY, target.z],
+          quat: [rotation[0] ?? 0, rotation[1] ?? 0, rotation[2] ?? 0, rotation[3] ?? 1],
+        }).unwrap();
+      };
+      const restorePosition = (raw: unknown): SaveRestoreReport => {
+        const normalized = normalizePlayerSlice(raw);
+        const issues: string[] = [...normalized.issues];
+        const record = normalized.value;
+        let target = resolveStanding(record.x, record.z, record.level);
+        if (target === undefined) {
+          issues.push('player saved position has no walkable support; using spawn');
+          target = spawnSupport === undefined
+            ? undefined
+            : { x: spawnCenter[0], z: spawnCenter[2], feetY: spawnSupport.worldY, level: spawnSupport.level, supportId: spawnSupport.id };
+        } else if (blockedAt(target.x, target.feetY, target.z)) {
+          issues.push('player saved position blocked by structure; using spawn');
+          target = spawnSupport === undefined
+            ? undefined
+            : { x: spawnCenter[0], z: spawnCenter[2], feetY: spawnSupport.worldY, level: spawnSupport.level, supportId: spawnSupport.id };
+        }
+        if (target === undefined || blockedAt(target.x, target.feetY, target.z)) {
+          issues.push('player restore failed: no safe standing position; keeping current position');
+          return { restored: 0, issues };
+        }
+        applySavedPosition(target, record.yaw);
+        return { restored: 1, issues };
+      };
+
+      yield ctx.provide('player', { entity: root, cell, facing: 'north', state, restorePosition });
 
       // ---- 移动系统：WASD 相对相机朝向，夹在地面内 ----
       world

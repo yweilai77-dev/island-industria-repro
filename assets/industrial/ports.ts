@@ -3,6 +3,8 @@ import type { PortSlotId } from './ids.ts';
 import type { LinkCreateResult, MaterialLinkSnapshot } from './link-runtime.ts';
 import type { InstalledPort, InstalledPortSnapshot } from './port-runtime.ts';
 import type { PortEndpoint } from './runtime-model.ts';
+import type { SavePortsData } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 
 /**
  * P2-B/P2-C `ports` 服务契约（只有类型 + 模块声明，没有实现）。
@@ -36,6 +38,10 @@ export interface PortService {
   removeLinksAt(partId: number, slotId: PortSlotId): number;
   /** 读投影（纯 JSON，给唯一 GameRead 用）。 */
   snapshot(): readonly InstalledPortSnapshot[];
+  /** 存档切片：接口盒安装/盒内缓冲 + 物料连接（含累计传递件数）。 */
+  saveSnapshot(): SavePortsData;
+  /** 读档：先重建接口盒/缓冲，再重建连接（连接状态由运行时按当前几何重算）。 */
+  restoreSave(rawPorts: unknown, rawLinks: unknown): SaveRestoreReport;
 }
 
 declare module '@forgeax/engine/plugin' {

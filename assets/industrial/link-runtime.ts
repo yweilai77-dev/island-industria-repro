@@ -84,6 +84,14 @@ export interface MaterialLinkState {
   readonly capacity: number;
 }
 
+/** 读档恢复用的一条连接记录（纯 JSON；moved 是累计传递件数）。 */
+export interface RestorableMaterialLink {
+  readonly id: string;
+  readonly from: PortEndpoint;
+  readonly to: PortEndpoint;
+  readonly moved?: number;
+}
+
 /** 读投影（纯 JSON，进唯一 GameRead）。 */
 export interface MaterialLinkSnapshot {
   readonly id: MaterialLinkId;
@@ -252,6 +260,50 @@ export class MaterialLinkRuntime {
       removed += 1;
     }
     return removed;
+  }
+
+  /**
+   * 读档恢复连接：只校验两端零件/安装位/方向（几何状态由 statusOf 在运行时重算），
+   * 不重复执行建链时的空间检查——存档世界在保存时已经合法，且读档时几何已由零件位置重建。
+   */
+  restore(
+    entries: readonly RestorableMaterialLink[],
+    scene: LinkScene,
+  ): { readonly restored: number; readonly issues: readonly string[] } {
+    const issues: string[] = [];
+    let restored = 0;
+    for (const entry of entries) {
+      if (entry.from.entityId === entry.to.entityId) {
+        issues.push('link restore skipped: self link ' + entry.id);
+        continue;
+      }
+      const fromInfo = endpointOf(entry.from.entityId, entry.from.slotId, scene);
+      if (typeof fromInfo === 'string') {
+        issues.push('link restore skipped: ' + entry.id + ' (' + fromInfo + ')');
+        continue;
+      }
+      const toInfo = endpointOf(entry.to.entityId, entry.to.slotId, scene);
+      if (typeof toInfo === 'string') {
+        issues.push('link restore skipped: ' + entry.id + ' (' + toInfo + ')');
+        continue;
+      }
+      if (fromInfo.role !== 'output' || toInfo.role !== 'input') {
+        issues.push('link restore skipped: wrong role ' + entry.id);
+        continue;
+      }
+      const link = materialLinkBetween(entry.from, entry.to);
+      if (this.byId.has(link.id)) {
+        issues.push('link restore skipped: duplicate ' + link.id);
+        continue;
+      }
+      this.byId.set(link.id, { link, capacity: MATERIAL_LINK_CAPACITY });
+      const moved = typeof entry.moved === 'number' && Number.isFinite(entry.moved)
+        ? Math.max(0, Math.floor(entry.moved))
+        : 0;
+      if (moved > 0) this.movedById.set(link.id, moved);
+      restored += 1;
+    }
+    return { restored, issues };
   }
 
   /** 连接当前是否可传递（两端存在、接口盒在位、数量不超限、几何仍然成立）。 */

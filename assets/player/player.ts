@@ -1,5 +1,6 @@
 import type { EntityHandle } from '@forgeax/engine/ecs';
 import type { Cell } from '../grid/grid.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 import type { Level } from '../spatial/space.ts';
 import { MAP_CONFIG } from '../world/map-config.ts';
 
@@ -44,6 +45,11 @@ export interface PlayerService {
   readonly cell: Cell;
   readonly facing: FacingDirection;
   readonly state: PlayerState;
+  /**
+   * 读档：把玩家放到存档位置。内部做一次垂直解算（优先按存档 level 找支撑面/楼梯），
+   * 找不到可站立面或落点被 blocksPlayer 结构占用时退回出生点并记录 issue。
+   */
+  restorePosition(raw: unknown): SaveRestoreReport;
 }
 
 /**

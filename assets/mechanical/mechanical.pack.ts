@@ -47,6 +47,8 @@ import {
 } from './parts.ts';
 import { portWorld, type Connection } from './ports.ts';
 import { MechanicalRegistry } from './registry.ts';
+import { normalizeKitGranted, normalizePartsSlice, type SaveMechanicalData } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 import {
   PartViewRegistry,
   createMechanicalViewAssets,
@@ -76,6 +78,10 @@ export interface MechanicalService {
   view(partId: number): PartView | undefined;
   hoveredPartId(): number | undefined;
   selectedPartId(): number | undefined;
+  /** 存档切片：零件（id/kind/placement）+ nextPartId + kitGranted；不含动力源启停。 */
+  saveSnapshot(): SaveMechanicalData;
+  /** 读档：用既有注册原语重建零件（不消耗物品、不检查科技门控、不重复发起步包）。 */
+  restoreSave(rawParts: unknown, rawNextPartId: unknown, rawKitGranted: unknown): SaveRestoreReport;
 }
 
 declare module '@forgeax/engine/plugin' {
@@ -253,6 +259,8 @@ export const mechanicalSystem: Plugin = {
         view: (partId) => views.get(partId),
         hoveredPartId: () => hoveredPartId,
         selectedPartId: () => selectedPartId,
+        saveSnapshot: () => saveSnapshot(),
+        restoreSave: (rawParts, rawNextPartId, rawKitGranted) => restoreSave(rawParts, rawNextPartId, rawKitGranted),
       };
 
       const selectedItem = (): ReturnType<typeof partDefForItem> => {
@@ -403,6 +411,114 @@ export const mechanicalSystem: Plugin = {
           }
           throw error;
         }
+      };
+
+      // ---- 存档：零件/计数器/起步包标记（restore 走既有注册原语，不消耗物品） ----
+      const saveSnapshot = (): SaveMechanicalData => ({
+        nextPartId: registry.nextPartId,
+        kitGranted: world.hasResource(KIT_GRANTED_KEY),
+        parts: registry.all()
+          .slice()
+          .sort((a, b) => a.id - b.id)
+          .map((part) => ({
+            id: part.id,
+            kind: part.def.id,
+            gx: part.placement.gx,
+            gz: part.placement.gz,
+            rotation: part.placement.rotation,
+            level: part.placement.level,
+          })),
+      });
+
+      /** 清空当前世界的全部零件与视图；读档前调用（幂等）。 */
+      const clearAllParts = (): void => {
+        for (const part of registry.all()) {
+          spatial.structures.unregister(structureIdForPart(part.id));
+          views.dispose(part.id);
+        }
+        registry.clear();
+        selectedPartId = undefined;
+        hoveredPartId = undefined;
+        hideGhost(selection);
+        commitTopology();
+      };
+
+      const restoreSave = (
+        rawParts: unknown,
+        rawNextPartId: unknown,
+        rawKitGranted: unknown,
+      ): SaveRestoreReport => {
+        const normalized = normalizePartsSlice(rawParts, rawNextPartId);
+        const kit = normalizeKitGranted(rawKitGranted);
+        const issues: string[] = [...normalized.issues, ...kit.issues];
+        clearAllParts();
+        let restored = 0;
+        for (const record of normalized.value.parts) {
+          const definition = MECHANICAL_PART_DEFS[record.kind as PartId];
+          if (definition === undefined) {
+            issues.push('part restore skipped: unknown kind ' + record.kind);
+            continue;
+          }
+          let placement: Placement;
+          try {
+            placement = createPlacement(
+              record.gx,
+              record.gz,
+              definition.w,
+              definition.d,
+              normalizeRotation(record.rotation),
+              record.level,
+            );
+          } catch (error) {
+            issues.push('part restore skipped: ' + record.kind + ' #' + record.id + ': ' + (error instanceof Error ? error.message : String(error)));
+            continue;
+          }
+          if (registry.get(record.id) !== undefined) {
+            issues.push('part restore skipped: duplicate id ' + record.id);
+            continue;
+          }
+          // 走既有三维合法性校验（支撑面/资源格/重叠），但不检查玩家占用与科技门控：
+          // 存档世界在保存时已经合法，读档只需要重建同一个世界。
+          const verdict = validatePlacement(placement, definition.height, {
+            spatial: spatial.index,
+            supports: spatial.supports,
+            isCellBlocked: (cell) => resourceNodes.isCellBlocked(cell),
+          });
+          if (!verdict.ok) {
+            issues.push('part restore skipped: ' + record.kind + ' #' + record.id + ' reason ' + String(verdict.reason));
+            continue;
+          }
+          const part: MechanicalPart = { id: record.id, def: definition, placement };
+          if (!registry.add(part)) {
+            issues.push('part restore skipped: registry rejected id ' + record.id);
+            continue;
+          }
+          try {
+            spatial.structures.register({
+              id: structureIdForPart(part.id),
+              aabb: placementAabb(placement, definition.height),
+              blocksBuild: true,
+              blocksPlayer: true,
+            });
+            views.add(part.id, createPartView(world, part, viewAssets));
+            restored += 1;
+          } catch (error) {
+            spatial.structures.unregister(structureIdForPart(part.id));
+            views.dispose(part.id);
+            registry.remove(part.id);
+            issues.push('part restore failed: #' + record.id + ': ' + (error instanceof Error ? error.message : String(error)));
+          }
+        }
+        const maxRestoredId = registry.all().reduce((max, part) => Math.max(max, part.id), 0);
+        registry.setNextPartId(Math.max(normalized.value.nextPartId, maxRestoredId + 1, 1));
+        commitTopology();
+        // 起步包标记：读档后不再发放；若存档标记为已发放则补上（禁止重复赠送）。
+        if (kit.value) {
+          if (!world.hasResource(KIT_GRANTED_KEY)) world.insertResource(KIT_GRANTED_KEY, 1);
+        } else if (world.hasResource(KIT_GRANTED_KEY)) {
+          world.removeResource(KIT_GRANTED_KEY);
+        }
+        return { restored, issues };
       };
 
       const showSelection = (part: MechanicalPart | undefined): void => {

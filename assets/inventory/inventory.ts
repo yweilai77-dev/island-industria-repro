@@ -1,4 +1,6 @@
 import { requireItemDefinition, type ItemId } from '../items/items.ts';
+import { normalizeInventorySlice, type SaveInventorySlice } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 
 /**
  * 库存纯逻辑 + 服务接口。
@@ -130,6 +132,10 @@ export interface InventoryService {
   has(itemId: ItemId, count?: number): boolean;
   /** 只读堆叠快照，供 UI/存档使用。 */
   stacks(): readonly ItemStack[];
+  /** 存档切片：纯 JSON（itemId + count），不暴露内部数组。 */
+  snapshot(): SaveInventorySlice;
+  /** 从不可信存档数据恢复：清空后重建，未知物品/非法数量逐条跳过并返回 issues。 */
+  restore(raw: unknown): SaveRestoreReport;
 }
 
 /** 由纯逻辑组装的服务（插件与测试共用；maxStack 来自物品定义）。 */
@@ -148,6 +154,15 @@ export function createInventoryService(): InventoryService {
       return inventoryHas(state, itemId, count);
     },
     stacks: () => inventorySnapshot(state),
+    snapshot: () => ({ stacks: inventorySnapshot(state) }),
+    restore: (raw) => {
+      const normalized = normalizeInventorySlice(raw);
+      state.stacks = [];
+      for (const stack of normalized.value.stacks) {
+        inventoryAdd(state, stack.itemId, stack.count, maxStackOf(stack.itemId));
+      }
+      return { restored: state.stacks.length, issues: normalized.issues };
+    },
   };
 }
 

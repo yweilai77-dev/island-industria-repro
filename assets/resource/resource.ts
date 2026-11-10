@@ -1,4 +1,6 @@
 import type { EntityHandle } from '@forgeax/engine/ecs';
+import type { SaveResourceRecord } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 import {
   cellsOf,
   createPlacement,
@@ -111,6 +113,10 @@ export interface ResourceNodesService {
   nodeAtCell(cell: Cell): ResourceNode | undefined;
   /** 扣减储量并返回明确的扣除结果；节点已枯竭/不存在时返回 undefined。 */
   harvest(nodeId: number, amount?: number): HarvestResult | undefined;
+  /** 存档切片：每处矿点的储量（depleted 由 amount 派生，存档里附一份便于排查）。 */
+  snapshot(): readonly SaveResourceRecord[];
+  /** 从不可信存档数据恢复：走 applyVisual 同步视觉/枯竭状态，未知节点逐条跳过。 */
+  restore(raw: unknown): SaveRestoreReport;
 }
 
 declare module '@forgeax/engine/plugin' {

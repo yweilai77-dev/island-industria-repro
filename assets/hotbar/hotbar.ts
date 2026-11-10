@@ -1,4 +1,6 @@
-import type { ItemId } from '../items/items.ts';
+import { getItemDefinition, type ItemId } from '../items/items.ts';
+import type { SaveHotbarSlice } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 
 /**
  * 快捷栏固定槽位数量。
@@ -102,6 +104,10 @@ export interface HotbarService {
   bind(slot: number, itemId: ItemId): boolean;
   unbind(slot: number): boolean;
   dropUnavailable(countOf: (itemId: ItemId) => number): readonly ItemId[];
+  /** 存档切片：槽位绑定 + 选中槽（纯 JSON）。 */
+  snapshot(): SaveHotbarSlice;
+  /** 从不可信存档数据恢复：非法槽位/未知物品/重复绑定逐条丢弃并返回 issues。 */
+  restore(raw: unknown): SaveRestoreReport;
 }
 
 /** 由纯逻辑组装的服务（插件与测试共用）。 */
@@ -121,6 +127,38 @@ export function createHotbarService(): HotbarService {
     bind: (slot, itemId) => bindItem(state, slot, itemId),
     unbind: (slot) => unbindSlot(state, slot),
     dropUnavailable: (countOf) => dropUnavailable(state, countOf),
+    snapshot: () => ({ slots: [...state.slots], selected: state.selected }),
+    restore: (raw) => {
+      const issues: string[] = [];
+      const source = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
+      const rawSlots = Array.isArray(source.slots) ? source.slots : [];
+      state.slots = Array.from({ length: HOTBAR_SLOT_COUNT }, () => null);
+      state.selected = 0;
+      const seen = new Set<ItemId>();
+      for (let slot = 0; slot < HOTBAR_SLOT_COUNT; slot += 1) {
+        const value = rawSlots[slot];
+        if (value === null || value === undefined) continue;
+        if (typeof value !== 'string' || getItemDefinition(value as ItemId) === undefined) {
+          issues.push('hotbar slot ' + slot + ' dropped: unknown item ' + String(value));
+          continue;
+        }
+        const itemId = value as ItemId;
+        if (seen.has(itemId)) {
+          issues.push('hotbar duplicate binding dropped at slot ' + slot + ': ' + itemId);
+          continue;
+        }
+        seen.add(itemId);
+        state.slots[slot] = itemId;
+      }
+      if (rawSlots.length > HOTBAR_SLOT_COUNT) issues.push('hotbar slots truncated to ' + HOTBAR_SLOT_COUNT);
+      const selected = typeof source.selected === 'number' && Number.isInteger(source.selected)
+        ? Math.min(HOTBAR_SLOT_COUNT - 1, Math.max(0, source.selected))
+        : 0;
+      if (selected !== source.selected && source.selected !== undefined) issues.push('hotbar selected repaired');
+      state.selected = selected;
+      state.revision += 1;
+      return { restored: seen.size, issues };
+    },
   };
 }
 

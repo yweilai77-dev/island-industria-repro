@@ -47,6 +47,8 @@ import {
 } from '../build/floors.ts';
 import { resolveSceneEntity } from '../shared/scene-refs.ts';
 import { PACKAGE_IDS } from '../shared/asset-refs.ts';
+import { floorFootprintOf as floorFootprintOfKind, normalizeFloorsSlice, type SaveFloorsData } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 
 const SYSTEM_NAME = 'island-industria/floors';
 const HIDDEN_Y = -1000;
@@ -80,6 +82,22 @@ interface FloorRecord {
   readonly traversalId?: string;
   readonly structureId?: string;
   faded: boolean;
+}
+
+/**
+ * 楼层系统对存档暴露的窄接口。
+ * 楼层是**玩家建造的世界状态**（不是派生量）：必须早于建筑/机械恢复，
+ * 因为楼板/开孔注册的支撑面是多层工厂恢复的前提。
+ */
+export interface FloorsService {
+  snapshotSave(): SaveFloorsData;
+  restoreSave(rawFloors: unknown, rawNextFloorId: unknown): SaveRestoreReport;
+}
+
+declare module '@forgeax/engine/plugin' {
+  interface EngineContextServices {
+    floors: FloorsService;
+  }
 }
 
 /**
@@ -331,11 +349,8 @@ export const floorsSystem: Plugin = {
         return items;
       };
 
-      const place = (targetKind: FloorKind, placement: Placement): boolean => {
-        const verdict = validate(targetKind, placement);
-        if (!verdict.ok) return false;
-        const id = nextId;
-        nextId += 1;
+      /** 用指定 id 生成视图并注册（用户放置与读档共用同一原语）。 */
+      const spawnRecord = (targetKind: FloorKind, placement: Placement, id: number): void => {
         const visuals = visualBoxes(targetKind, placement);
         const entities: EntityHandle[] = [];
         const fadeEntities: EntityHandle[] = [];
@@ -362,8 +377,82 @@ export const floorsSystem: Plugin = {
           throw error;
         }
         records.set(id, record);
+      };
+
+      const place = (targetKind: FloorKind, placement: Placement): boolean => {
+        const verdict = validate(targetKind, placement);
+        if (!verdict.ok) return false;
+        const id = nextId;
+        nextId += 1;
+        spawnRecord(targetKind, placement, id);
         return true;
       };
+
+      // ---- 存档：楼层 + nextFloorId（restore 内部重建支撑面/通行面/碰撞体） ----
+      const floorsService: FloorsService = {
+        snapshotSave: () => ({
+          nextFloorId: nextId,
+          floors: [...records.values()]
+            .sort((a, b) => a.id - b.id)
+            .map((record) => ({
+              id: record.id,
+              kind: record.kind,
+              gx: record.placement.gx,
+              gz: record.placement.gz,
+              rotation: record.placement.rotation,
+              level: record.placement.level,
+            })),
+        }),
+        restoreSave: (rawFloors: unknown, rawNextFloorId: unknown): SaveRestoreReport => {
+          const normalized = normalizeFloorsSlice(rawFloors, rawNextFloorId);
+          const issues = [...normalized.issues];
+          for (const record of [...records.values()]) {
+            unregister(record);
+            for (const entity of record.entities) world.despawn(entity).unwrap();
+          }
+          records.clear();
+          columnSlot.clear();
+          slabSlot.clear();
+          pillarCells.clear();
+          nextId = 1;
+          let restored = 0;
+          for (const record of normalized.value.floors) {
+            const footprint = floorFootprintOfKind(record.kind);
+            if (footprint === undefined) {
+              issues.push('floor restore skipped: unknown kind ' + record.kind);
+              continue;
+            }
+            let placement: Placement;
+            try {
+              placement = createPlacement(
+                record.gx,
+                record.gz,
+                footprint.w,
+                footprint.d,
+                normalizeRotation(record.rotation),
+                record.level,
+              );
+            } catch (error) {
+              issues.push('floor restore skipped: ' + record.kind + ': ' + (error instanceof Error ? error.message : String(error)));
+              continue;
+            }
+            if (records.has(record.id)) {
+              issues.push('floor restore skipped: duplicate id ' + record.id);
+              continue;
+            }
+            try {
+              spawnRecord(record.kind as FloorKind, placement, record.id);
+              restored += 1;
+            } catch (error) {
+              issues.push('floor restore failed: #' + record.id + ': ' + (error instanceof Error ? error.message : String(error)));
+            }
+          }
+          const maxRestoredId = [...records.keys()].reduce((max, id) => Math.max(max, id), 0);
+          nextId = Math.max(normalized.value.nextFloorId, maxRestoredId + 1, 1);
+          return { restored, issues };
+        },
+      };
+      yield ctx.provide('floors', floorsService);
 
       const remove = (id: number): boolean => {
         const record = records.get(id);

@@ -54,6 +54,8 @@ import {
 } from './adjustment.ts';
 import { FLOOR_MODE_KEY } from './floors.ts';
 import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
+import { normalizeBuildingsSlice, type SaveBuildingsData } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 
 const SYSTEM_NAME = BUILD_SYSTEM_NAME;
 const HIDDEN_Y = -1000;
@@ -86,6 +88,22 @@ interface BuildingRecord {
   readonly height: number;
   /** 权威放置数据：搬动确认后更新。 */
   placement: Placement;
+}
+
+/**
+ * 建造系统对存档暴露的窄接口：只收发纯 JSON，内部负责重建视图与空间索引。
+ * 读档顺序：floors → player → buildings → mechanical（建筑可落在已恢复的楼板上）。
+ */
+export interface BuildingsService {
+  revision(): number;
+  snapshotSave(): SaveBuildingsData;
+  restoreSave(rawBuildings: unknown, rawNextBuildingId: unknown): SaveRestoreReport;
+}
+
+declare module '@forgeax/engine/plugin' {
+  interface EngineContextServices {
+    buildings: BuildingsService;
+  }
 }
 
 /**
@@ -310,7 +328,8 @@ export const buildSystem: Plugin = {
         if (selectedId === id) hideSelection();
       };
 
-      const place = (placement: Placement, typeIndex: number): void => {
+      /** 用指定 id 生成视图并注册（用户放置与读档共用同一原语）。 */
+      const placeWithId = (placement: Placement, typeIndex: number, id: number): void => {
         const type = BUILDING_TYPES[typeIndex] as (typeof BUILDING_TYPES)[number];
         const meshHandle = typeMeshes[typeIndex]!;
         const materialHandle = typeMaterials[typeIndex]!;
@@ -322,19 +341,109 @@ export const buildSystem: Plugin = {
             { component: MeshRenderer, data: { materials: [materialHandle] } },
           )
           .unwrap();
-        world
-          .spawn(
-            { component: Transform, data: { pos: [0, 0.15, -(type.d / 2) - 0.06] } },
-            { component: ChildOf, data: { parent: entity } },
-            { component: MeshFilter, data: { assetHandle: stripeMesh } },
-            { component: MeshRenderer, data: { materials: [stripeMaterial] } },
-          )
-          .unwrap();
+        try {
+          world
+            .spawn(
+              { component: Transform, data: { pos: [0, 0.15, -(type.d / 2) - 0.06] } },
+              { component: ChildOf, data: { parent: entity } },
+              { component: MeshFilter, data: { assetHandle: stripeMesh } },
+              { component: MeshRenderer, data: { materials: [stripeMaterial] } },
+            )
+            .unwrap();
+          spatial.registerBuilding(id, placement, type.height);
+          buildings.set(id, { entity, typeIndex, height: type.height, placement });
+        } catch (error) {
+          world.despawn(entity).unwrap();
+          throw error;
+        }
+      };
+
+      const place = (placement: Placement, typeIndex: number): void => {
         const id = nextBuildingId;
         nextBuildingId += 1;
-        spatial.registerBuilding(id, placement, type.height);
-        buildings.set(id, { entity, typeIndex, height: type.height, placement });
+        placeWithId(placement, typeIndex, id);
       };
+
+      // ---- 存档：建筑 + nextBuildingId（restore 内部重建视图/空间索引） ----
+      let buildingsRevision = 0;
+      const buildingsService: BuildingsService = {
+        revision: () => buildingsRevision,
+        snapshotSave: () => ({
+          nextBuildingId,
+          buildings: [...buildings.entries()]
+            .sort((a, b) => a[0] - b[0])
+            .map(([id, record]) => ({
+              id,
+              kind: (BUILDING_TYPES[record.typeIndex] as (typeof BUILDING_TYPES)[number]).id,
+              gx: record.placement.gx,
+              gz: record.placement.gz,
+              rotation: record.placement.rotation,
+              level: record.placement.level,
+            })),
+        }),
+        restoreSave: (rawBuildings: unknown, rawNextBuildingId: unknown): SaveRestoreReport => {
+          const normalized = normalizeBuildingsSlice(rawBuildings, rawNextBuildingId);
+          const issues = [...normalized.issues];
+          if (adjustment !== undefined) finishAdjustment('abort');
+          for (const [id, record] of [...buildings]) {
+            spatial.unregisterBuilding(id);
+            world.despawn(record.entity).unwrap();
+          }
+          buildings.clear();
+          hideSelection();
+          nextBuildingId = 1;
+          let restored = 0;
+          for (const record of normalized.value.buildings) {
+            const typeIndex = BUILDING_TYPES.findIndex((type) => type.id === record.kind);
+            const type = BUILDING_TYPES[typeIndex];
+            if (type === undefined) {
+              issues.push('building restore skipped: unknown kind ' + record.kind);
+              continue;
+            }
+            let placement: Placement;
+            try {
+              placement = createPlacement(
+                record.gx,
+                record.gz,
+                type.w,
+                type.d,
+                normalizeRotation(record.rotation),
+                record.level,
+              );
+            } catch (error) {
+              issues.push('building restore skipped: ' + record.kind + ': ' + (error instanceof Error ? error.message : String(error)));
+              continue;
+            }
+            // 读档校验不含玩家占用（玩家位置在建筑之前恢复，存档世界本身是合法的）；
+            // 支撑面/资源格/重叠仍然走既有 validatePlacement，失败逐条跳过。
+            const verdict = validatePlacement(placement, type.height, {
+              spatial,
+              supports,
+              isCellBlocked: (cell) => resourceNodes.isCellBlocked(cell),
+              excludeBuildingId: record.id,
+            });
+            if (!verdict.ok) {
+              issues.push('building restore skipped: ' + record.kind + ' #' + record.id + ' reason ' + String(verdict.reason));
+              continue;
+            }
+            if (buildings.has(record.id)) {
+              issues.push('building restore skipped: duplicate id ' + record.id);
+              continue;
+            }
+            try {
+              placeWithId(placement, typeIndex, record.id);
+              restored += 1;
+            } catch (error) {
+              issues.push('building restore failed: #' + record.id + ': ' + (error instanceof Error ? error.message : String(error)));
+            }
+          }
+          const maxRestoredId = [...buildings.keys()].reduce((max, id) => Math.max(max, id), 0);
+          nextBuildingId = Math.max(normalized.value.nextBuildingId, maxRestoredId + 1, 1);
+          buildingsRevision += 1;
+          return { restored, issues };
+        },
+      };
+      yield ctx.provide('buildings', buildingsService);
 
       const findBuildingHit = (ray: ArrayLike<number>): number | undefined => {
         let bestId: number | undefined;

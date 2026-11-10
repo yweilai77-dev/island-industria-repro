@@ -31,6 +31,17 @@ import type {} from '../diagnostics/diagnostics.pack.ts';
 import type {} from '../endgame/endgame.pack.ts';
 import type { DiagnosticsSnapshot } from '../diagnostics/diagnostics-types.ts';
 import type { EndgameSnapshot } from '../endgame/endgame-types.ts';
+import type { MechanicalRuntimeSavePort, SaveRestoreReport } from '../save/save-ports.ts';
+import type { SaveProductionSlice, SaveSourceRecord } from '../save/save-schema.ts';
+import { normalizeSourcesSlice } from '../save/save-schema.ts';
+import { restoreProduction, snapshotProduction } from './production-save.ts';
+
+declare module '@forgeax/engine/plugin' {
+  interface EngineContextServices {
+    /** 存档用：动力源启停 + 加工运行时状态（由 mechanical-runtime 提供）。 */
+    mechanicalRuntimeSave: MechanicalRuntimeSavePort;
+  }
+}
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 /** 玩家离动力源多近才能摇动摇柄（米，水平距离）。 */
@@ -94,6 +105,37 @@ export const mechanicalRuntime: Plugin = {
         snapshot: () => goalProgress.snapshot(),
         observation: () => goalProgress.observation(),
         state: () => goalProgress.state(),
+      });
+
+      // P2-E3 存档：动力源启停 + 加工运行时状态（机器缓冲/进度、溜槽在途物品）。
+      // 只通过 mechanical 服务与 ProductionRuntime 的公开方法读写，不复制状态。
+      yield ctx.provide('mechanicalRuntimeSave', {
+        snapshotSources: (): readonly SaveSourceRecord[] => mechanical.parts()
+          .filter((part) => part.def.kind === 'power-source')
+          .sort((a, b) => a.id - b.id)
+          .map((part) => ({ partId: part.id, enabled: state.isSourceEnabled(part.id) })),
+        restoreSources: (raw: unknown): SaveRestoreReport => {
+          const normalized = normalizeSourcesSlice(raw);
+          const parts = mechanical.parts();
+          // 先按恢复后的零件表重建拓扑/动力源运行时状态，再写开关。
+          state.sync(mechanical.revision, parts, mechanical.connections());
+          const byId = new Map(parts.map((part) => [part.id, part]));
+          const issues: string[] = [...normalized.issues];
+          let restored = 0;
+          for (const record of normalized.value) {
+            const part = byId.get(record.partId);
+            if (part === undefined || part.def.kind !== 'power-source') {
+              issues.push('source restore skipped: not a power source ' + record.partId);
+              continue;
+            }
+            state.setSourceEnabled(record.partId, record.enabled);
+            restored += 1;
+          }
+          return { restored, issues };
+        },
+        snapshotProduction: (): SaveProductionSlice => snapshotProduction(production),
+        restoreProduction: (raw: unknown): SaveRestoreReport =>
+          restoreProduction(production, mechanical.parts(), raw),
       });
 
       // ---- 溜槽在途物品的纯视图实体 ----
@@ -162,6 +204,9 @@ export const mechanicalRuntime: Plugin = {
           diagnostics,
           project,
           inventory: inventorySnapshot,
+          // P2-E3：存档验收需要的只读世界状态（建筑/矿量）；不新增第二个 GameRead。
+          buildings: ctx.get('buildings')?.snapshotSave().buildings ?? [],
+          resources: ctx.get('resourceNodes')?.snapshot() ?? [],
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],
             level: player.state.level,

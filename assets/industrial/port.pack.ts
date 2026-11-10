@@ -23,6 +23,8 @@ import type { LinkScene } from './link-runtime.ts';
 import { MaterialLinkRuntime } from './link-runtime.ts';
 import { portModuleOfId } from './port-module.ts';
 import { PortRuntime, type InstalledPort } from './port-runtime.ts';
+import { normalizeLinksSlice, normalizePortsSlice, type SavePortsData } from '../save/save-schema.ts';
+import type { SaveRestoreReport } from '../save/save-ports.ts';
 import { PortViewRegistry } from './port-views.ts';
 import type {} from './ports.ts';
 import type { PortService } from './ports.ts';
@@ -113,6 +115,8 @@ export const industrialPorts: Plugin = {
         createLink: (from, to) => links.create(from, to, sceneOf()),
         removeLinksAt: (partId, slotId) => links.removeAt(partId, slotId),
         snapshot: () => runtime.snapshot(),
+        saveSnapshot: () => saveSnapshot(),
+        restoreSave: (rawPorts, rawLinks) => restoreSave(rawPorts, rawLinks),
       };
       yield ctx.provide('ports', service);
 
@@ -209,6 +213,73 @@ export const industrialPorts: Plugin = {
           part.id,
           withRotation(part.placement, normalizeRotation(part.placement.rotation + 90)),
         );
+      };
+
+      // ---- 存档：接口盒安装/盒内缓冲 + 物料连接（恢复后连接状态由运行时重算） ----
+      const saveSnapshot = (): SavePortsData => ({
+        ports: runtime.snapshot().map((port) => ({
+          partId: port.partId,
+          slotId: port.slotId,
+          moduleId: port.moduleId,
+          itemId: port.itemId,
+          count: port.count,
+        })),
+        links: links.snapshot(sceneOf()).map((record) => ({
+          id: record.id,
+          from: { entityId: record.from.entityId, slotId: record.from.slotId },
+          to: { entityId: record.to.entityId, slotId: record.to.slotId },
+          moved: record.moved,
+        })),
+      });
+
+      const restoreSave = (rawPorts: unknown, rawLinks: unknown): SaveRestoreReport => {
+        const normalizedPorts = normalizePortsSlice(rawPorts);
+        const normalizedLinks = normalizeLinksSlice(rawLinks);
+        const issues: string[] = [...normalizedPorts.issues, ...normalizedLinks.issues];
+        runtime.clear();
+        links.clear();
+        armed = undefined;
+        const parts = mechanical.parts();
+        const byId = new Map(parts.map((part) => [part.id, part]));
+        let restored = 0;
+        for (const record of normalizedPorts.value) {
+          const part = byId.get(record.partId);
+          if (part === undefined) {
+            issues.push('port restore skipped: missing part ' + record.partId);
+            continue;
+          }
+          const core = coreForPart(part.def.id);
+          if (core === undefined) {
+            issues.push('port restore skipped: part ' + record.partId + ' is not a processing core');
+            continue;
+          }
+          const outcome = runtime.restore(
+            record.partId,
+            core,
+            record.slotId as PortSlotId,
+            record.moduleId as PortModuleId,
+            { itemId: record.itemId, count: record.count },
+          );
+          if (outcome === 'buffer-count-clamped' || outcome === 'buffer-item-missing') {
+            issues.push('port buffer repaired: ' + record.partId + ' ' + record.slotId + ' (' + outcome + ')');
+          } else if (outcome !== undefined) {
+            issues.push('port restore skipped: ' + record.partId + ' ' + record.slotId + ' (' + outcome + ')');
+            continue;
+          }
+          restored += 1;
+        }
+        const linkReport = links.restore(
+          normalizedLinks.value.map((record) => ({
+            id: record.id,
+            from: { entityId: record.from.entityId, slotId: record.from.slotId as PortSlotId },
+            to: { entityId: record.to.entityId, slotId: record.to.slotId as PortSlotId },
+            moved: record.moved,
+          })),
+          sceneOf(mechanical.parts()),
+        );
+        issues.push(...linkReport.issues);
+        restored += linkReport.restored;
+        return { restored, issues };
       };
 
       world.addSystem(Update, {
