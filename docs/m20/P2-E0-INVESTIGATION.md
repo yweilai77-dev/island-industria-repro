@@ -12,10 +12,10 @@
 | 项 | 值 |
 |:--|:--|
 | 阶段 | M2.0-P2-E0（P2-E 前置调查；**未进入 P2-E 实施**） |
-| 基线 commit | `f0fd623`（完整 `f0fd6234cfcc7c8e135a79a456c6987ed1ea3437`），本次实测 `git rev-parse` 一致，`git status --porcelain` 为空 |
+| 基线 commit | `f0fd623`（完整 `f0fd6234cfcc7c8e135a79a456c6987ed1ea3437`），调查开始时实测 `git rev-parse` 一致、`git status --porcelain` 为空；调查期间仓库后台 autosave 把新增文档提交为 `e974550`/`62f8ac9`，提交内容仅 `docs/m20/P2-E0-*.md`，游戏代码零变更 |
 | 调查日期 | 2026-11-10 |
 | 调查对象 | `E:\DeepseekHarness\ISLAND INDUSTRIA`（下称"仓库"），只读 |
-| 交付物 | 本文件（`docs/m20/P2-E0-INVESTIGATION.md`），仓库内唯一新增文件 |
+| 交付物 | 本文件（`docs/m20/P2-E0-INVESTIGATION.md`）；P2-E0 同期另交付 `P2-E0-TECH-TREE-DESIGN.md` / `P2-E0-DEMO-PROGRESSION.md` / `P2-E0-DEPENDENCY-MAP.md`，本阶段共 4 份文档、无代码变更 |
 | 授权边界 | 不修改任何游戏代码/资源/测试/配方；不运行 `pnpm test`/`typecheck`/`build`/`project play` |
 | 配套资料 | 仓库外事实表三份（见 0.5），本文件把其结论回填为仓库内 `file:line` |
 
