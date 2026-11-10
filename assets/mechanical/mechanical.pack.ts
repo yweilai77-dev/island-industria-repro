@@ -25,6 +25,7 @@ import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import type {} from '../spatial/service.ts';
 import type {} from '@forgeax/engine/app';
 import { FLOOR_MODE_KEY } from '../build/floors.ts';
+import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
 import { BUILD_TARGET_STATE_KEY, type BuildTargetState } from '../build/target.ts';
 import {
   PROTOTYPE_KIT,
@@ -60,6 +61,10 @@ export interface MechanicalService {
   partAt(cell: { gx: number; gz: number }, level: number): MechanicalPart | undefined;
   /** 事务化的位置更新（A 阶段不暴露 G，留给 B 的搬动/旋转）。 */
   updatePlacement(partId: number, next: Placement): boolean;
+  /** 结构模块等外部系统使用的放置前校验（只校验，不消耗物品）。 */
+  canPlacePart(definitionId: PartId, placement: Placement): boolean;
+  /** 借现有机械事务放置一个零件：校验 + registry + 空间 + 视图 + 消耗物品。 */
+  placePart(definitionId: PartId, placement: Placement): boolean;
   /** B runtime：只读视图访问；生命周期仍由本 pack 管理。 */
   view(partId: number): PartView | undefined;
   hoveredPartId(): number | undefined;
@@ -217,6 +222,8 @@ export const mechanicalSystem: Plugin = {
         connections: () => registry.connections(),
         partAt,
         updatePlacement,
+        canPlacePart: (definitionId, placement) => canPlacePart(definitionId, placement),
+        placePart: (definitionId, placement) => placePart(definitionId, placement),
         view: (partId) => views.get(partId),
         hoveredPartId: () => hoveredPartId,
         selectedPartId: () => selectedPartId,
@@ -324,6 +331,21 @@ export const mechanicalSystem: Plugin = {
         }
       };
 
+      /** 供结构模块等外部系统使用：只校验放置合法性（不消耗物品、不改任何状态）。 */
+      const canPlacePart = (definitionId: PartId, placement: Placement): boolean => {
+        const definition = MECHANICAL_PART_DEFS[definitionId];
+        if (!definition) return false;
+        return validPlacement(definition, placement);
+      };
+
+      /** 借现有机械事务放置零件：校验 + registry + 空间 + 视图 + 消耗物品（失败不产生半状态）。 */
+      const placePart = (definitionId: PartId, placement: Placement): boolean => {
+        const definition = MECHANICAL_PART_DEFS[definitionId];
+        if (!definition) return false;
+        if (!validPlacement(definition, placement)) return false;
+        return place(definition, placement);
+      };
+
       const remove = (partId: number): boolean => {
         const part = registry.get(partId);
         if (!part) return false;
@@ -399,8 +421,8 @@ export const mechanicalSystem: Plugin = {
         queries: [],
         fn: () => {
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
-          // 楼层建造模式（M1.8-A）：floors 插件在 build 之前写入该资源，机械放置完全让出输入。
-          if (world.hasResource(FLOOR_MODE_KEY)) {
+          // 楼层建造模式（M1.8-A）与结构模块放置模式（P2-D）：其它输入系统让出输入。
+          if (world.hasResource(FLOOR_MODE_KEY) || world.hasResource(STRUCTURE_MODE_KEY)) {
             setGhost(undefined, undefined, false);
             hideGhost(selection);
             selectedPartId = undefined;

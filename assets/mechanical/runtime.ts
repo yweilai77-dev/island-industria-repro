@@ -25,6 +25,8 @@ import { resolveSceneEntity } from '../shared/scene-refs.ts';
 import { createGoalProgress } from '../goal/goal-service.ts';
 import { createPortFlowGateway } from '../industrial/port-flow.ts';
 import type {} from '../industrial/ports.ts';
+import type {} from '../industrial/assembly-service.ts';
+import { STRUCTURE_TARGET_STATE_KEY, type StructureTargetState } from '../shared/placement-mode.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 /** 玩家离动力源多近才能摇动摇柄（米，水平距离）。 */
@@ -54,10 +56,11 @@ export {
  */
 export const mechanicalRuntime: Plugin = {
   name: SYSTEM_NAME,
-  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory', 'ports'],
+  inject: ['world', 'mechanical', 'hotbar', 'gameHost', 'assets', 'gameScene', 'player', 'inventory', 'ports', 'assembly'],
   apply(ctx) {
     const world = ctx.world;
     const mechanical = ctx.mechanical;
+    const assembly = ctx.assembly;
     const hotbar = ctx.hotbar;
     const inventory = ctx.inventory;
     const ports = ctx.ports;
@@ -116,6 +119,10 @@ export const mechanicalRuntime: Plugin = {
         const buildTarget = world.hasResource(BUILD_TARGET_STATE_KEY)
           ? world.getResource<BuildTargetState>(BUILD_TARGET_STATE_KEY)
           : undefined;
+        // P2-D：结构模块放置模式的目标格（真实悬停计算，只读投影）。
+        const structureTarget = world.hasResource(STRUCTURE_TARGET_STATE_KEY)
+          ? world.getResource<StructureTargetState>(STRUCTURE_TARGET_STATE_KEY)
+          : undefined;
         const playerPosition = player.state.position;
 
         return {
@@ -125,6 +132,8 @@ export const mechanicalRuntime: Plugin = {
           ports: ports.snapshot(),
           // P2-C：核心间物料连接（稳定 ID、容量、实时状态、累计传递件数）。
           links: ports.links(),
+          // P2-D：组合机械（成员核心保持独立 ID；这里只是结构组织视图）。
+          assemblies: assembly.snapshot(),
           inventory: inventorySnapshot,
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],
@@ -144,6 +153,17 @@ export const mechanicalRuntime: Plugin = {
               : null,
             hoveredPartId: mechanical.hoveredPartId() ?? null,
             selectedPartId: mechanical.selectedPartId() ?? null,
+            selectedAssemblyId: assembly.selectedAssemblyId() ?? null,
+            structureMode: assembly.modeActive(),
+            structureTarget: structureTarget
+              ? {
+                active: structureTarget.active,
+                cell: structureTarget.cell ? { gx: structureTarget.cell.gx, gz: structureTarget.cell.gz } : null,
+                level: structureTarget.level,
+                valid: structureTarget.valid,
+                reason: structureTarget.reason,
+              }
+              : null,
             selectedItem: hotbar.slots[hotbar.selected] ?? null,
             hotbar: { slots: [...hotbar.slots], selected: hotbar.selected },
           },

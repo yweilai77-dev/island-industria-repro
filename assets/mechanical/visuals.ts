@@ -407,6 +407,22 @@ export function createPartView(
   const align = quat.fromAxisAngle(quat.create(), [0, 0, 1], -Math.PI / 2);
   const alignQuat: [number, number, number, number] = [align[0] ?? 0, align[1] ?? 0, align[2] ?? 0, align[3] ?? 1];
 
+  // P2-D 结构框架：底座 + 四角立柱 + 顶梁 + 橙色铆钉。钢灰色、无运动部件，
+  // 与加工核心（深灰机体/砖红炉体）在远处也能区分；四角铆钉帮助读出朝向与边界。
+  if (part.def.kind === 'structure') {
+    spawnChild(world, root, view.plateMesh, view.shaftMaterial, [0, 0.04, 0]);
+    spawnChild(world, root, view.plateMesh, view.shaftMaterial, [0, 0.96, 0]);
+    const corners: readonly (readonly [number, number])[] = [
+      [-0.4, -0.4], [0.4, -0.4], [-0.4, 0.4], [0.4, 0.4],
+    ];
+    for (const [x, z] of corners) {
+      // 橙色立柱让结构模块在灰色地坪/深灰机器旁一眼可辨；上下钢板仍是钢灰色。
+      spawnChild(world, root, view.postMesh, view.accentMaterial, [x, 0.5, z], [1, 0.3, 1]);
+      spawnChild(world, root, view.markerMesh, view.bodyMaterial, [x, 0.14, z], [1.2, 1.2, 1.2]);
+    }
+    return { root };
+  }
+
   if (part.def.kind === 'power-source') {
     spawnChild(world, root, view.bodyMesh, view.bodyMaterial, [0, 0.45, 0]);
     const spinner = world

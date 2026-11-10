@@ -59,6 +59,9 @@ export type CoreId = `core.${string}`;
 /** 接口盒 ID。例：`port.through`。 */
 export type PortModuleId = `port.${string}`;
 
+/** 结构模块 ID。例：`structure.frame`（P2-D）。 */
+export type StructureModuleId = `structure.${string}`;
+
 /** 机器表面安装位 ID。例：`slot.crusher.in.pz`。 */
 export type PortSlotId = `slot.${string}`;
 
@@ -78,6 +81,11 @@ export function coreNameOf(id: CoreId): string {
 /** 构造接口盒 ID。 */
 export function makePortModuleId(name: string): PortModuleId {
   return `port.${name}` as PortModuleId;
+}
+
+/** 构造结构模块 ID。 */
+export function makeStructureModuleId(name: string): StructureModuleId {
+  return `structure.${name}` as StructureModuleId;
 }
 
 // ---------------------------------------------------------------------------

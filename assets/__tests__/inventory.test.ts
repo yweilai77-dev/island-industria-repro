@@ -35,7 +35,7 @@ describe('item definitions', () => {
     expect(IRON_ORE_DEFINITION.icon).toBe('iron_ore');
     expect(getItemDefinition(IRON)).toEqual(IRON_ORE_DEFINITION);
     // P2-B：接口盒成为真实物品，14 → 15；P2-C：输出/分流/合流接口盒，15 → 18。
-    expect(itemDefinitions()).toHaveLength(18);
+    expect(itemDefinitions()).toHaveLength(19);
   });
 
   it('returns undefined for unknown item ids', () => {

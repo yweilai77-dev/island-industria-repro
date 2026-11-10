@@ -53,6 +53,7 @@ import {
   type BuildingAdjustment,
 } from './adjustment.ts';
 import { FLOOR_MODE_KEY } from './floors.ts';
+import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
 
 const SYSTEM_NAME = BUILD_SYSTEM_NAME;
 const HIDDEN_Y = -1000;
@@ -491,6 +492,16 @@ export const buildSystem: Plugin = {
               hideAllGhosts();
               hideDirectionMarker();
               hideSelection();
+              return;
+            }
+
+            // 结构模块放置模式（P2-D）：assembly 插件写入该资源，普通建造完全让出输入。
+            if (world.hasResource(STRUCTURE_MODE_KEY)) {
+              if (adjustment !== undefined) finishAdjustment('abort');
+              hideAllGhosts();
+              hideDirectionMarker();
+              hideSelection();
+              publishTarget({ active: false });
               return;
             }
 

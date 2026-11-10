@@ -9,6 +9,7 @@ import { inputCapacity, outputCapacity } from '../production/production.ts';
 import { recipesFor } from '../production/recipes.ts';
 import { INDUSTRIAL_CATALOG, type IndustrialCatalog } from './catalog.ts';
 import { PORT_SLOT_ROLES, PROCESS_KINDS, isStableId } from './ids.ts';
+import { STRUCTURE_MODULES } from './assembly-module.ts';
 
 /**
  * M2.0-P2-A 工业数据完整性校验（纯函数、零引擎依赖）。
@@ -225,7 +226,47 @@ export function validateIndustrialCatalog(
     }
   }
 
-  // ---- 4. 配方 ------------------------------------------------------------
+  // ---- 5. 结构模块（P2-D）：真实物品 + 真实零件 + 几何一致 -----------------
+  const structureItems = new Map<string, string>();
+  const structureParts = new Map<string, string>();
+  for (const module of STRUCTURE_MODULES) {
+    const path = `structure:${module.id}`;
+    if (!isStableId(module.id)) add('structure.id-format', path, `structure module id must be a stable id: ${module.id}`);
+    if (getItemDefinition(module.itemId) === undefined) {
+      add('structure.item-id', path, `unknown item bound to structure module: ${module.itemId}`);
+    }
+    const owner = structureItems.get(module.itemId);
+    if (owner !== undefined) add('structure.item-duplicate', path, `item ${module.itemId} already bound to ${owner}`);
+    else structureItems.set(module.itemId, module.id);
+    const partOwner = structureParts.get(module.partId);
+    if (partOwner !== undefined) add('structure.part-duplicate', path, `part ${module.partId} already bound to ${partOwner}`);
+    else structureParts.set(module.partId, module.id);
+    const part = MECHANICAL_PART_DEFS[module.partId];
+    if (!part) {
+      add('structure.part-missing', path, `structure part ${module.partId} is not a registered mechanical part`);
+      continue;
+    }
+    if (part.kind !== 'structure') add('structure.part-kind', path, `${module.partId} must have kind 'structure'`);
+    if (part.itemId !== module.itemId) {
+      add('structure.part-item', path, `part itemId ${part.itemId} must equal module itemId ${module.itemId}`);
+    }
+    if (part.w !== module.footprint.w || part.d !== module.footprint.d) {
+      add('structure.geometry', path, `footprint ${module.footprint.w}x${module.footprint.d} must equal ${part.w}x${part.d}`);
+    }
+    if (part.height !== module.height) {
+      add('structure.geometry', path, `height ${module.height} must equal ${part.height}`);
+    }
+    if (part.ports.length > 0) add('structure.ports', path, 'structure module must not declare mechanical drive ports');
+    if (part.maxTorque !== 0) add('structure.torque', path, 'structure module must not transmit torque');
+    if (module.connection !== 'orthogonal') add('structure.connection', path, `unknown structure connection: ${module.connection}`);
+    if (module.reach !== 1) add('structure.reach', path, 'orthogonal structure connection reach must be 1 cell');
+    if (!module.connects.includes('core')) add('structure.connects', path, 'structure module must be able to connect processing cores');
+    for (const kind of module.connects) {
+      if (kind !== 'core' && kind !== 'module') add('structure.connects', path, `unknown structure node kind: ${kind}`);
+    }
+  }
+
+  // ---- 6. 配方 ------------------------------------------------------------
   for (const definition of catalog.recipes) {
     const path = `recipe:${definition.id}`;
     const recipe = definition.recipe;

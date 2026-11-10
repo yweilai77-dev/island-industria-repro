@@ -27,7 +27,8 @@ export type ItemId =
   | 'interface_box'
   | 'output_interface_box'
   | 'splitter_box'
-  | 'merger_box';
+  | 'merger_box'
+  | 'structure_frame';
 
 export interface ItemDefinition {
   readonly id: ItemId;
@@ -62,6 +63,7 @@ export const ITEM_IDS = {
   OUTPUT_INTERFACE_BOX: 'output_interface_box',
   SPLITTER_BOX: 'splitter_box',
   MERGER_BOX: 'merger_box',
+  STRUCTURE_FRAME: 'structure_frame',
 } as const satisfies Record<string, ItemId>;
 
 export const IRON_ORE_DEFINITION: ItemDefinition = {
@@ -222,6 +224,15 @@ const MECHANICAL_DEFINITIONS: readonly ItemDefinition[] = [
     name: '合流接口盒',
     description: '两路输入、一路输出的物料合流模块，只能装在加工核心的输入安装位。多路上游按轮询规则合入同一输入缓冲。悬停核心按 L 安装。',
     icon: 'merger_box',
+    maxStack: 999,
+    category: 'mechanical',
+  },
+  {
+    // P2-D：结构模块。玩家用它在世界中把多台独立加工核心组织成组合机械。
+    id: ITEM_IDS.STRUCTURE_FRAME,
+    name: '结构框架',
+    description: '组合机械的基础结构模块。悬停格子按 P 进入结构放置模式，左键放置；与加工核心或其它结构框架正交相邻时把它们组织成组合机械。拆除后组合关系自动解除，物品返还。',
+    icon: 'structure_frame',
     maxStack: 999,
     category: 'mechanical',
   },

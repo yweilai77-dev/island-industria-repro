@@ -67,6 +67,8 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical')) },
           // P2-B 接口盒：注入 mechanical/inventory，必须晚于机械系统。
           { $asset: guidText(assetGuid(PACKAGE_IDS.industrial, 'plugin/ports')) },
+          // P2-D 组合机械：注入 mechanical/inventory，必须早于 mechanical-runtime（后者读 assembly 服务）。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.industrial, 'plugin/assembly')) },
           // 动力运行时依赖 mechanical 与 ports 服务，必须在其后挂载。
           { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical-runtime')) },
         ],

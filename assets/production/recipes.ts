@@ -142,6 +142,18 @@ export const FORGE_CORE_RECIPE: Recipe = {
   seconds: 10,
 };
 
+/**
+ * P2-D：锻压结构框架（组合机械的基础结构模块）。
+ * 与 P2-C 的接口盒配方同属既有锻造工艺；获取/解锁规则留给 P2-E 统一决定。
+ */
+export const FORGE_STRUCTURE_FRAME_RECIPE: Recipe = {
+  id: 'forge-structure-frame',
+  label: '锻压结构框架',
+  inputs: [{ itemId: ITEM_IDS.IRON_INGOT, count: 3 }],
+  outputs: [{ itemId: ITEM_IDS.STRUCTURE_FRAME, count: 1 }],
+  seconds: 5,
+};
+
 /** 每台机器的配方列表；`recipeIndex` 是玩家用 R 切换的下标。 */
 export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>>> = Object.freeze({
   crusher: Object.freeze([CRUSH_RECIPE]),
@@ -157,6 +169,7 @@ export const MACHINE_RECIPES: Readonly<Partial<Record<PartId, readonly Recipe[]>
     FORGE_CRUSHER_RECIPE,
     FORGE_SMELTER_RECIPE,
     FORGE_CORE_RECIPE,
+    FORGE_STRUCTURE_FRAME_RECIPE,
   ]),
 });
 

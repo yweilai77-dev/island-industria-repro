@@ -10,6 +10,7 @@ import type {} from '../inventory/inventory.ts';
 import { ITEM_IDS, type ItemId } from '../items/items.ts';
 import type {} from '../player/player.ts';
 import { FLOOR_MODE_KEY } from '../build/floors.ts';
+import { STRUCTURE_MODE_KEY } from '../shared/placement-mode.ts';
 import { BUILD_SYSTEM_NAME } from '../build/target.ts';
 import type {} from '../mechanical/mechanical.pack.ts';
 import { isProductionMachine, type MechanicalPart } from '../mechanical/parts.ts';
@@ -215,7 +216,7 @@ export const industrialPorts: Plugin = {
           views.update({ parts, ports: installed, links: links.snapshot(sceneOf(parts)), armed });
 
           // 楼层建造模式：机械/接口交互整体让出输入（与 mechanical 插件一致）。
-          if (world.hasResource(FLOOR_MODE_KEY)) return;
+          if (world.hasResource(FLOOR_MODE_KEY) || world.hasResource(STRUCTURE_MODE_KEY)) return;
           const input = world.getResource<InputSnapshot>(INPUT_SNAPSHOT_RESOURCE_KEY);
           if (input.keyboard.justPressedCode('Escape') && armed) {
             armed = undefined;
@@ -251,6 +252,11 @@ export default definePack({
       'plugin/ports': {
         kind: 'plugin',
         module: { specifier: './port.pack.ts', export: 'industrialPorts' },
+      },
+      // P2-D 组合机械：结构框架放置 + Assembly 运行时（同属 industrial 包）。
+      'plugin/assembly': {
+        kind: 'plugin',
+        module: { specifier: './assembly-system.ts', export: 'industrialAssembly' },
       },
     }),
 });

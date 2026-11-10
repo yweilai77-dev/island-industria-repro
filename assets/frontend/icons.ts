@@ -206,6 +206,20 @@ const MERGER_BOX_SVG = [
   '</svg>',
 ].join('');
 
+// P2-D：结构框架（组合机械的基础结构模块）。金属方框 + 四角铆钉。
+const STRUCTURE_FRAME_SVG = [
+  '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
+  '<rect x="10" y="14" width="44" height="8" rx="2" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="10" y="42" width="44" height="8" rx="2" fill="#8b95a0" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="10" y="22" width="8" height="20" fill="#7a848e" stroke="#2c3035" stroke-width="2"/>',
+  '<rect x="46" y="22" width="8" height="20" fill="#7a848e" stroke="#2c3035" stroke-width="2"/>',
+  '<circle cx="14" cy="18" r="2.4" fill="#d9a441"/><circle cx="50" cy="18" r="2.4" fill="#d9a441"/>',
+  '<circle cx="14" cy="46" r="2.4" fill="#d9a441"/><circle cx="50" cy="46" r="2.4" fill="#d9a441"/>',
+  '<path d="M24 32h16" stroke="#101418" stroke-width="5" stroke-linecap="round"/>',
+  '<path d="M24 32h16" stroke="#c9d6e2" stroke-width="2.5" stroke-linecap="round"/>',
+  '</svg>',
+].join('');
+
 const PLACEHOLDER_SVG = [
   '<svg viewBox="0 0 64 64" width="100%" height="100%" aria-hidden="true">',
   '<rect x="12" y="12" width="40" height="40" rx="8" fill="#3a4a5c" stroke="#22303d" stroke-width="2"/>',
@@ -252,6 +266,8 @@ export function itemIconSvg(iconKey: string): string {
       return SPLITTER_BOX_SVG;
     case 'merger_box':
       return MERGER_BOX_SVG;
+    case 'structure_frame':
+      return STRUCTURE_FRAME_SVG;
     default:
       return PLACEHOLDER_SVG;
   }

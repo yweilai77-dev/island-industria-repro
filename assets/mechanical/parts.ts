@@ -6,7 +6,7 @@ import { ITEM_IDS, type ItemId } from '../items/items.ts';
  * 纯数据、零引擎依赖；端口只存本地信息，世界端口由 ports.ts 从 Placement 派生。
  */
 
-export type PartKind = 'shaft' | 'gear' | 'power-source' | 'machine' | 'transport';
+export type PartKind = 'shaft' | 'gear' | 'power-source' | 'machine' | 'transport' | 'structure';
 export type PartId =
   | 'shaft'
   | 'gear_12'
@@ -18,7 +18,8 @@ export type PartId =
   | 'crusher'
   | 'smelter'
   | 'forge'
-  | 'chute';
+  | 'chute'
+  | 'structure_frame';
 export type Axis = 'x' | 'y' | 'z';
 export type PortRole = 'axial' | 'mesh' | 'input' | 'output';
 export type Face = 'px' | 'nx' | 'py' | 'ny' | 'pz' | 'nz';
@@ -306,6 +307,21 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     maxTorque: 0,
     ports: [],
   },
+  /**
+   * P2-D 结构模块：不传动力、不传物料、不参与加工与物流。
+   * 它只提供世界空间占用与「结构相邻」关系，由 assembly 插件据此推导组合机械。
+   */
+  structure_frame: {
+    id: 'structure_frame',
+    kind: 'structure',
+    itemId: ITEM_IDS.STRUCTURE_FRAME,
+    label: '结构框架',
+    w: 1,
+    d: 1,
+    height: MECH_PART_HEIGHT,
+    maxTorque: 0,
+    ports: [],
+  },
 });
 
 /** 零件顺序决定初始套件绑定到快捷栏槽位的顺序；前 5 项必须保持不变（历史验收脚本依赖）。 */
@@ -321,6 +337,7 @@ export const MECHANICAL_PART_IDS: readonly PartId[] = Object.freeze([
   'smelter',
   'forge',
   'flywheel_source',
+  'structure_frame',
 ]);
 
 export const MECHANICAL_ITEM_IDS: readonly ItemId[] = Object.freeze(
@@ -348,6 +365,8 @@ export const PROTOTYPE_KIT: Readonly<Record<PartId, number>> = Object.freeze({
   smelter: 3,
   forge: 1,
   flywheel_source: 1,
+  // P2-D：结构框架不走快捷栏（无空槽），由 assembly 插件单独发放原型数量。
+  structure_frame: 0,
 });
 
 /**

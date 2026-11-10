@@ -136,6 +136,7 @@ describe('工业目录：索引可反查', () => {
       'forge-shaft',
       'forge-smelter',
       'forge-splitter-box',
+      'forge-structure-frame',
       'forge-vertical-drive',
       'smelt-crushed-ore',
     ]);

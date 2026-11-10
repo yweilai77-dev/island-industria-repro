@@ -86,6 +86,7 @@ describe('工业数据 ↔ 现有配方', () => {
       'forge-crusher',
       'forge-smelter',
       'forge-processing-core',
+      'forge-structure-frame',
     ]);
   });
 
@@ -163,8 +164,8 @@ describe('工业数据 ↔ 现有物料方向', () => {
 });
 
 describe('接口盒物品接入（P2-C）', () => {
-  it('物品总数 18：新增输出/分流/合流三种接口盒', () => {
-    expect(itemDefinitions()).toHaveLength(18);
+  it('物品总数 19：P2-C 三种新接口盒 + P2-D 结构框架', () => {
+    expect(itemDefinitions()).toHaveLength(19);
   });
 
   it('四种接口盒全部绑定真实物品，且分属明确的输入/输出功能', () => {
