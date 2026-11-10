@@ -9,8 +9,15 @@ import {
 /** 首期只有铁矿石一种资源。 */
 export type ResourceType = 'iron-ore';
 
-/** 每个矿点的初始储量；四处共 80。 */
-export const IRON_ORE_MAX_AMOUNT = 20;
+/**
+ * 每个矿点的初始储量；四处共 240（M2.0-P2-E3 资源平衡）。
+ *
+ * 来源：docs/m20/P2-E0-DEMO-PROGRESSION.md §10.2 的供给结论（原 4×20=80 不足，
+ * 完整生产链需要约 170–210 铁锭当量）。实际核算见 P2-E3 平衡报告：
+ * 科技交付 106 + 自建设备 ≈50 + 容错 ≈15 ≈ 171 铁锭当量（含起步包抵扣）。
+ * 240 > 171 留约 40% 余量，且单矿点 60 仍低于 3D 两位数字 HUD 的 99 上限。
+ */
+export const IRON_ORE_MAX_AMOUNT = 60;
 
 /** 资源节点的静态定义（锚点是最小角整数格）。 */
 export interface ResourceNodeSpec {
@@ -28,7 +35,8 @@ export interface ResourceNodeSpec {
  * - A、B 保留 M1.5 原坐标与行为；
  * - C、D 位于 M1.6 新增区域（旧 20×20 之外），四象限各一处；
  * - 均避开玩家出生格 (-2,2)、固定平台 x[0,8)/z[2,8) 与楼梯 x[-4,0)/z[3,4)；
- * - 彼此不重叠，总储量 4×20=80，仍低于 3D HUD 两位数字上限 99。
+ * - 彼此不重叠，总储量 4×60=240（M2.0-P2-E3 平衡调整），单点 60 仍低于 3D HUD
+ *   两位数字上限 99。
  */
 export const IRON_ORE_NODES: readonly ResourceNodeSpec[] = [
   { id: 1, type: 'iron-ore', displayName: 'Iron Ore Node A', gx: -5, gz: 4, w: 2, d: 2 },

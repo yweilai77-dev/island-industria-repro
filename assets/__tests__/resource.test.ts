@@ -87,11 +87,12 @@ describe('iron ore node layout (M1.6: four 2x2 nodes)', () => {
 });
 
 describe('iron ore reserves and dynamic blocking', () => {
-  it('gives four nodes 20 each for 80 total below the 99 HUD cap', () => {
-    expect(IRON_ORE_MAX_AMOUNT).toBe(20);
+  it('gives four nodes 60 each for 240 total, each node below the 99 HUD cap (P2-E3 balance)', () => {
+    expect(IRON_ORE_MAX_AMOUNT).toBe(60);
     expect(IRON_ORE_NODES.length).toBe(4);
-    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBe(80);
-    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBeLessThanOrEqual(99);
+    expect(IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT).toBe(240);
+    // 3D 矿石计数是两位数字：单点储量必须 <= 99，总储量不受此限。
+    expect(IRON_ORE_MAX_AMOUNT).toBeLessThanOrEqual(99);
   });
 
   it('stops blocking after a node is depleted', () => {

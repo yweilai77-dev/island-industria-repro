@@ -103,12 +103,12 @@ describe('resource nodes on the 32x32 map', () => {
     }
   });
 
-  it('totals 80 reserves, below the 99 two-digit HUD cap', () => {
-    expect(IRON_ORE_MAX_AMOUNT).toBe(20);
+  it('totals 240 reserves (P2-E3 balance), each node below the 99 two-digit HUD cap', () => {
+    expect(IRON_ORE_MAX_AMOUNT).toBe(60);
     expect(IRON_ORE_NODES).toHaveLength(4);
     const total = IRON_ORE_NODES.length * IRON_ORE_MAX_AMOUNT;
-    expect(total).toBe(80);
-    expect(total).toBeLessThanOrEqual(99);
+    expect(total).toBe(240);
+    expect(IRON_ORE_MAX_AMOUNT).toBeLessThanOrEqual(99);
   });
 
   it('keeps the four nodes mutually non-overlapping', () => {
