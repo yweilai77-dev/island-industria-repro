@@ -40,15 +40,24 @@ export function createHarvest({ play, h, state, invOf, logStep, assert }) {
   const harvestAt = async (node) => {
     assert(await h.gotoCell(node.view, 24000, true), 'must reach ore node ' + node.label);
     const before = invOf(await state(), 'iron_ore');
-    for (let index = 0; index < node.presses; index += 1) {
+    // 状态驱动（不盲按固定次数）：每次按 F 后先让输入落帧，再推进一个采集周期；
+    // 直到库存增量达到目标或达到尝试上限。这样对 CDP 输入偶发丢帧不敏感。
+    const wanted = node.presses;
+    let attempts = 0;
+    const maxAttempts = Math.ceil(wanted * 1.6) + 8;
+    while (attempts < maxAttempts) {
+      const gainedNow = invOf(await state(), 'iron_ore') - before;
+      if (gainedNow >= wanted - 2) break;
       await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(50);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await play.wait(40);
+      attempts += 1;
     }
     const total = invOf(await state(), 'iron_ore');
     const gained = total - before;
-    assert(gained >= node.presses - 3, 'ore node ' + node.label + ' must yield ~' + node.presses
-      + ' ore, got ' + gained);
+    assert(gained >= wanted - 3, 'ore node ' + node.label + ' must yield ~' + wanted
+      + ' ore, got ' + gained + ' after ' + attempts + ' attempts');
     logStep('ORE-NODE', { node: node.label, gained, total });
     return total;
   };

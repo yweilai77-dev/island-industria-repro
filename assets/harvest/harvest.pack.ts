@@ -333,9 +333,9 @@ export const ironHarvest: Plugin = {
                     }
                   }
                   // 排队的那一次立刻开始（仍需站在原地、节点仍有储量）。
-                  console.log('HARV-DONE node=' + nodeId + ' gained=' + String(result?.deducted) + ' remaining=' + String(result?.remaining));
+                  console.log('HARV-DONE r=' + String(result?.remaining));
                   if (queuedHarvest) {
-                    console.log('HARV-QUEUED-START');
+                    console.log('HARV-QUEUE-START');
                     queuedHarvest = false;
                     if (inRange && (result?.remaining ?? 0) > 0) startHarvest(state, nodeId);
                   }
