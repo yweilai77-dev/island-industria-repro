@@ -43,6 +43,15 @@ export interface MachineDiagnostic {
   readonly blockedLinkId: string | null;
   readonly severity: DiagnosticsSeverity;
   readonly message: string;
+  /**
+   * 每台机器逐项检查的 5 条条件（动力 / 原料 / 输出空间 / 输入接口盒 / 物料连接）。
+   * P2-E2 追加字段（不改既有字段名）：诊断视图逐条回答「这台机器为什么不动」，
+   * 终局运行证明也可复用同一形状。
+   *
+   * 设为可选是为了不破坏既有消费方（前端服务视图等按旧形状构造快照的代码）；
+   * 诊断服务本身**总是**提供该字段。
+   */
+  readonly conditions?: readonly DiagnosticsCondition[];
 }
 
 /** 一条物料连接的诊断。 */
