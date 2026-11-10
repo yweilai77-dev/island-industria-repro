@@ -1,4 +1,5 @@
-// P2-E3/F 共用工具：真实键鼠/事务，唯一读取 GameRead `mechanical`；仅允许 __II_TEST_TECH__/__II_TEST_ENDGAME__。import { createP2dCtx } from './p2d-assembly-lib.mjs';
+// P2-E3/F 共用工具：真实键鼠/事务，唯一读取 GameRead `mechanical`；仅允许 __II_TEST_TECH__/__II_TEST_ENDGAME__。
+import { createP2dCtx } from './p2d-assembly-lib.mjs';
 import { createOrderKit } from './m20-order-lib.mjs';
 
 /** 快捷栏槽位（正式起步包绑定）。 */
