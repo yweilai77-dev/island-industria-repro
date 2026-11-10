@@ -249,9 +249,11 @@ export function createCtx(play, h) {
   const feedByC = async (point, times) => {
     await play.mouse.move(point);
     await play.wait(150);
+    // P2-E3 兼容性：CDP 极短按键偶发整帧丢失 -> hold(60ms) + 给输入落帧时间。
     for (let index = 0; index < times; index += 1) {
-      await play.keyboard.press('KeyC');
-      await play.advance(0.1);
+      await play.keyboard.hold('KeyC', 60);
+      await play.advance(0.12);
+      await play.wait(30);
     }
   };
 

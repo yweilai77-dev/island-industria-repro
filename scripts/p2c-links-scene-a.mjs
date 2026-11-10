@@ -25,20 +25,27 @@ export async function runSceneA(play, h, C) {
 
     assert(await h.gotoCell(ORE_NODE_A_VIEW, 16000, true), 'must reach iron ore node A');
     const before = countOf(await state(), 'iron_ore');
-    for (let index = 0; index < ORE_TARGET_A; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(80);
+    // P2-E3 兼容性：改为状态驱动（按目标库存补齐），对 CDP 输入偶发丢帧不敏感。
+    let attemptsA = 0;
+    while (countOf(await state(), 'iron_ore') - before < ORE_TARGET_A - 1 && attemptsA < ORE_TARGET_A * 2) {
+      await play.keyboard.hold('KeyF', 60);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await play.wait(60);
+      attemptsA += 1;
     }
     const afterA = countOf(await state(), 'iron_ore');
     console.log('HARVEST-A=' + JSON.stringify({ before, afterA }));
     assert(afterA >= before + ORE_TARGET_A - 1, 'harvesting node A must add iron ore');
 
     await walk(VIA_SOUTH_WEST, ORE_NODE_B_VIEW);
-    for (let index = 0; index < ORE_TARGET_B; index += 1) {
-      await play.keyboard.press('KeyF');
-      await play.advance(3.4);
-      await play.wait(80);
+    let attemptsB = 0;
+    while (countOf(await state(), 'iron_ore') - afterA < ORE_TARGET_B - 1 && attemptsB < ORE_TARGET_B * 2) {
+      await play.keyboard.hold('KeyF', 60);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await play.wait(60);
+      attemptsB += 1;
     }
     const ore = countOf(await state(), 'iron_ore');
     console.log('HARVEST-B=' + JSON.stringify({ afterA, ore }));
