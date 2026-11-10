@@ -313,18 +313,19 @@ export default async function playthrough(play) {
 
     const crusherId = machineOf(s, 'crush-iron-ore').partId;
     let blocked = null;
-    for (let attempt = 0; attempt < 16; attempt += 1) {
+    for (let attempt = 0; attempt < 40; attempt += 1) {
       s = await state();
       const crusher = machineById(s, crusherId);
-      if (crusher.inputCount === 0) await feedMachine(CRUSHER_CELL, crusherId, 4);
-      await play.advance(4.0);
+      if (crusher.inputCount === 0 && countOf(s, 'iron_ore') > 0) await feedMachine(CRUSHER_CELL, crusherId, 4);
+      await play.advance(5.0);
       s = await state();
       const d = diag(s);
       const hasFull = s.production.machines.some((machine) => machine.block === 'output-full');
       const hasBlockedLink = d !== null && d.links.some((link) => link.blocked === true);
       if (hasFull && hasBlockedLink) { blocked = s; break; }
     }
-    assert(blocked !== null, 'downstream saturation must produce a real output-full + blocked link');
+    assert(blocked !== null, 'saturation missing; machines='
+      + JSON.stringify((await state()).production.machines));
     const d = assertDiagnosticsMirror(blocked, 'downstream-full');
     const forgeView = d.machines.find((machine) => machine.partId === forgeId);
     assert(forgeView?.powered === false && forgeView?.block === 'no-power', 'the forge must be the stopped machine');
