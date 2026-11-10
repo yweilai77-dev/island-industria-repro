@@ -7,7 +7,7 @@
  *
  * 契约：`diagnostics-types.ts`；纯逻辑：`diagnostics.ts`（零引擎依赖、可单测）。
  */
-import { Update } from '@forgeax/engine/ecs';
+import { Time, Update } from '@forgeax/engine/ecs';
 import { definePack } from '@forgeax/engine/pack/source';
 import type { Plugin } from '@forgeax/engine/plugin';
 import { ok } from '@forgeax/engine/types';
@@ -33,6 +33,8 @@ declare module '@forgeax/engine/plugin' {
 }
 
 const SYSTEM_NAME = 'island-industria/diagnostics';
+/** 诊断投影的刷新间隔（秒）：5 Hz 足够 UI，且避免每帧重建拖慢输入/拾取。 */
+const DIAGNOSTICS_UPDATE_INTERVAL = 0.2;
 /** 必须晚于机械运行时：后者每帧刷新 goalProgress 观测（本系统只读它的当帧结果）。 */
 const AFTER_SYSTEM = 'island-industria/mechanical-runtime';
 
@@ -45,6 +47,7 @@ export const diagnosticsPlugin: Plugin = {
     ctx.effect(function* () {
       let revision = 0;
       let latest: DiagnosticsSnapshot | null = null;
+      let updateAccumulator = 0;
       yield ctx.provide('diagnostics', {
         revision: () => revision,
         snapshot: () => latest,
@@ -60,6 +63,11 @@ export const diagnosticsPlugin: Plugin = {
             latest = null;
             return;
           }
+          // 性能：诊断是给玩家「看」的只读投影，不需要每帧重建（本阶段每帧系统增加后
+          // 每帧重建会拖慢拾取/鼠标探针等真实输入链路）。最多 5 Hz。
+          updateAccumulator += world.getResource(Time).delta;
+          if (updateAccumulator < DIAGNOSTICS_UPDATE_INTERVAL) return;
+          updateAccumulator = 0;
           const goal = ctx.get('goalProgress');
           if (!goal) {
             latest = null;

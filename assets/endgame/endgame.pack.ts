@@ -38,6 +38,8 @@ import {
 } from './endgame.ts';
 
 const SYSTEM_NAME = 'island-industria/endgame';
+/** 终局投影/证明窗口的更新间隔（秒）：0.2 s 对 60 s 观察窗口足够，且避免每帧重建拖慢输入。 */
+const ENDGAME_UPDATE_INTERVAL = 0.2;
 
 export interface BeginProofResult {
   readonly ok: boolean;
@@ -85,6 +87,7 @@ export const endgamePlugin: Plugin = {
 
     let revision = 0;
     let lastCompleted = false;
+    let proofClock = 0;
     const readTech = () => {
       try {
         return tech.snapshot();
@@ -211,9 +214,14 @@ export const endgamePlugin: Plugin = {
         name: SYSTEM_NAME,
         queries: [],
         fn: () => {
-          const delta = world.getResource(Time).delta;
+          // 性能：只读投影不需要每帧重建；窗口计时用累计 delta（精度 0.2 s 对 60 s 窗口足够），
+          // 降低投影重建频率避免拖慢真实输入/拾取链路。
+          proofClock += world.getResource(Time).delta;
+          if (proofClock < ENDGAME_UPDATE_INTERVAL) return;
+          const step = proofClock;
+          proofClock = 0;
           const view = readView();
-          const tick = proof.tick(delta, view);
+          const tick = proof.tick(step, view);
           let changed = tick.changed;
           const techSnapshot = readTech();
           if (retryCompletion(techSnapshot)) changed = true;

@@ -24,7 +24,8 @@ export function createHarness(play) {
 
   const probeCell = async (pt) => {
     await play.mouse.move([pt[0], pt[1]]);
-    await play.wait(70);
+    // P2-E3 兼容性：本阶段每帧系统更多，鼠标位置 -> 拾取结果可能晚一帧；探针等待放宽。
+    await play.wait(120);
     const s = await state();
     const t = s.ui?.buildTarget;
     const hovered = s.ui?.hoveredPartId ?? null;
@@ -263,7 +264,7 @@ export function createHarness(play) {
     for (const [dx, dy] of SCREEN_NUDGES) {
       const candidate = [Math.min(0.97, Math.max(0.03, base[0] + dx)), Math.min(0.95, Math.max(0.05, base[1] + dy))];
       await play.mouse.move(candidate);
-      await play.wait(80);
+      await play.wait(120);
       const s = await state();
       const hovered = s.ui?.hoveredPartId ?? null;
       if (hovered !== null) return { point: candidate, partId: hovered };
@@ -286,7 +287,7 @@ export function createHarness(play) {
           Math.min(0.95, Math.max(0.05, base[1] + dy * radius)),
         ];
         await play.mouse.move(candidate);
-        await play.wait(70);
+        await play.wait(110);
         const s = await state();
         if ((s.ui?.hoveredPartId ?? null) === partId) return candidate;
       }
@@ -324,7 +325,7 @@ export function createHarness(play) {
     for (const [dx, dy] of SCREEN_NUDGES) {
       const candidate = [Math.min(0.97, Math.max(0.03, pt[0] + dx)), Math.min(0.95, Math.max(0.05, pt[1] + dy))];
       await play.mouse.move(candidate);
-      await play.wait(90);
+      await play.wait(140);
       const s = await state();
       const t = s.ui?.buildTarget;
       const hovered = s.ui?.hoveredPartId ?? null;
