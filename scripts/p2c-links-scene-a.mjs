@@ -38,6 +38,20 @@ export async function runSceneA(play, h, C) {
     console.log('HARVEST-A=' + JSON.stringify({ before, afterA }));
     assert(afterA >= before + ORE_TARGET_A - 1, 'harvesting node A must add iron ore');
 
+    // P2-E3 平衡兼容：单点储量 20 -> 60 后，矿点 A（-5,4 2x2）不会因为本场景的采集而枯竭，
+    // 而场景 B 的 B-source-crusher1 需要 (-4,5)（仍在 A 占地内）。这里把 A 挖空腾出建造格。
+    let stall = 0;
+    for (let guard = 0; guard < 90 && stall < 3; guard += 1) {
+      const n = countOf(await state(), 'iron_ore');
+      await play.keyboard.hold('KeyF', 60);
+      await play.advance(0.2);
+      await play.advance(3.0);
+      await play.wait(40);
+      const m = countOf(await state(), 'iron_ore');
+      stall = m > n ? 0 : stall + 1;
+    }
+    console.log('NODE-A-DEPLETED=' + JSON.stringify({ ore: countOf(await state(), 'iron_ore') }));
+
     await walk(VIA_SOUTH_WEST, ORE_NODE_B_VIEW);
     let attemptsB = 0;
     while (countOf(await state(), 'iron_ore') - afterA < ORE_TARGET_B - 1 && attemptsB < ORE_TARGET_B * 2) {
