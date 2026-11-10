@@ -302,8 +302,9 @@ export function buildProjectView(
       failureReason: proof.failureReason,
     },
     blocks: project.blocks,
-    // 与服务端 beginProof 的拒绝条件对齐：未解锁 / 交付未齐 / 已在窗口内 都不能开始。
-    canBegin: !project.completed && project.unlocked && project.delivery.complete && proof.state !== 'running',
+    // 运行证明与成套交付是两个独立条件（任务书 §五 C2）：交付未齐也允许先跑证明，
+    // 完成终局仍要求两者都满足。未解锁 / 已在窗口内 / 已完成时不能开始。
+    canBegin: !project.completed && project.unlocked && proof.state !== 'running',
     canCancel: proof.state === 'running',
     banner: project.completed
       ? 'Demo 通关：成套设备已交付 ' + project.delivery.totalDelivered + '/'

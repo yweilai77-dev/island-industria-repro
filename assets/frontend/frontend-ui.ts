@@ -9,6 +9,7 @@ import { FRONTEND_UI_CSS } from './frontend-ui-styles.ts';
 import { FRONTEND_TECH_CSS } from './frontend-tech-styles.ts';
 import { createHudStack } from './frontend-hud.ts';
 import { createPanelStack } from './frontend-panel-stack.ts';
+import { resolveSaveMode } from './frontend-save-channel.ts';
 import { installTestHooks } from './frontend-test-hooks.ts';
 import { PROTOCOL_VERSION, isOkResult, parseState } from './frontend-ui-protocol.ts';
 import type { CatalogItem, HostLike, StateMessage, UiState } from './frontend-ui-protocol.ts';
@@ -43,6 +44,9 @@ export const frontendUi: Plugin = {
     const flags = typeof testFlags === 'object' && testFlags !== null
       ? testFlags as { progression?: 'player' | 'legacy'; techHooks?: boolean; saveStorageKey?: string }
       : undefined;
+    // 存档模式：无 flags = 正式玩家（persistent）；有 saveStorageKey = 隔离档；
+    // 只带 progression/techHooks 的旧验收脚本 = off（不读档、不自动保存）。
+    const saveMode = resolveSaveMode(flags);
     const canvas = host.canvas;
     const onCanvasContextMenu = (event: MouseEvent): void => {
       // 只抑制游戏 canvas；页面其他区域保持浏览器默认右键菜单。
@@ -186,6 +190,7 @@ export const frontendUi: Plugin = {
       subtitle,
       send,
       showError,
+      saveMode,
       ...(flags?.saveStorageKey ? { saveStorageKey: flags.saveStorageKey } : {}),
     });
 

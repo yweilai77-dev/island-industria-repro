@@ -9,15 +9,61 @@ import { buildSaveView, type SaveView } from './frontend-service-view.ts';
  * - 前端上行：收到 read 后回 `save/data {found, data?}`；三个按钮分别发
  *   `save/request` / `save/restore` / `save/new`。
  *
- * 存储优先用测试脚手架注入的 `globalThis.__II_STORAGE__`（键名可由
- * `__II_TEST_FLAGS__.saveStorageKey` 覆盖），否则用 localStorage。
+ * 存储优先用测试脚手架注入的 `globalThis.__II_STORAGE__`（键名可覆盖），否则用 localStorage。
  * 所有存储操作都 try/catch：失败只写 console.error + 页脚「保存失败」，绝不让游戏崩溃。
+ *
+ * 存档模式（P2-E2 wave-2，修复「跨 play 会话自动恢复旧世界」污染旧验收脚本）：
+ * - `persistent`：无 `__II_TEST_FLAGS__` 的真实玩家 → 默认 key + 自动读档 + 自动保存；
+ * - `isolated`：有 `flags.saveStorageKey` → 用该 key，行为同 persistent（p2e3 存档验收用）；
+ * - `off`：有 flags 但没有 saveStorageKey（旧验收脚本 / E1 脚本）→ 不读档、不自动保存、
+ *   不响应 visibilitychange、不写存储；引擎问 `save/read` 一律回 found:false。
  */
 
 export const DEFAULT_SAVE_STORAGE_KEY = 'island-industria/save/slot-1';
 const LOCAL_STATUS_TTL_MS = 3000;
 const AUTOSAVE_INTERVAL_MS = 15000;
 const NEW_GAME_RELOAD_DELAY_MS = 250;
+
+export type SaveMode = 'persistent' | 'isolated' | 'off';
+
+/** off 模式页脚固定文案（测试脚本能看到、玩家不会看到）。 */
+export const OFF_MODE_STATUS_TEXT = '测试模式：不写存档';
+
+export interface SaveModeFlags {
+  readonly saveStorageKey?: string | null;
+  /** 旧验收脚本的其它 flags（只用于判定 off；值本身不影响存档模式）。 */
+  readonly progression?: 'player' | 'legacy';
+  readonly techHooks?: boolean;
+}
+
+/**
+ * 由 `__II_TEST_FLAGS__` 派生存档模式：
+ * - undefined = 正式玩家（persistent）；
+ * - 有非空 saveStorageKey = 隔离档（isolated）；
+ * - 只带其它 flags（旧脚本的 progression/techHooks）= off。
+ */
+export function resolveSaveMode(flags: SaveModeFlags | undefined): SaveMode {
+  if (flags === undefined) return 'persistent';
+  return typeof flags.saveStorageKey === 'string' && flags.saveStorageKey.length > 0
+    ? 'isolated'
+    : 'off';
+}
+
+/** 模式对应的行为策略（纯数据，便于单测）。 */
+export interface SavePolicy {
+  /** 是否允许访问本地存储（off 模式完全不碰存储）。 */
+  readonly allowStorage: boolean;
+  readonly autoRestore: boolean;
+  readonly autosave: boolean;
+  readonly fixedStatusText: string | null;
+}
+
+export function savePolicyOf(mode: SaveMode): SavePolicy {
+  if (mode === 'off') {
+    return { allowStorage: false, autoRestore: false, autosave: false, fixedStatusText: OFF_MODE_STATUS_TEXT };
+  }
+  return { allowStorage: true, autoRestore: true, autosave: true, fixedStatusText: null };
+}
 
 export interface SaveStorage {
   getItem(key: string): string | null;
@@ -29,6 +75,8 @@ export interface SaveChannelOptions {
   send(message: Record<string, unknown>): void;
   /** 覆盖默认键（验收脚本用它隔离存档，避免污染真实存档）。 */
   storageKey?: string | null;
+  /** 存档模式；缺省 persistent（正式玩家行为）。 */
+  mode?: SaveMode;
 }
 
 export interface SaveChannelHandle {
@@ -75,6 +123,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function createSaveChannel(doc: Document, options: SaveChannelOptions): SaveChannelHandle {
+  const mode = options.mode ?? 'persistent';
+  const policy = savePolicyOf(mode);
   const key = options.storageKey && options.storageKey.length > 0
     ? options.storageKey
     : DEFAULT_SAVE_STORAGE_KEY;
@@ -101,18 +151,21 @@ export function createSaveChannel(doc: Document, options: SaveChannelOptions): S
   const restoreButton = makeButton('读取存档', 'save-restore');
   const resetButton = makeButton('清空存档并重开', 'save-new');
   element.append(status, actions);
+  element.dataset.mode = mode;
+  if (!policy.allowStorage) {
+    // off 模式（旧验收脚本）：三个按钮都禁用，绝不触发任何存档命令。
+    for (const button of [saveButton, restoreButton, resetButton]) {
+      button.disabled = true;
+      button.title = OFF_MODE_STATUS_TEXT;
+    }
+  }
 
   let localStatus: LocalStatus | null = null;
   let restoreRequested = false;
   let resetPending = false;
   let disposed = false;
 
-  const setStatus = (view: SaveView | LocalStatus): void => {
-    if (!('until' in view)) {
-      status.textContent = view.text;
-      status.dataset.tone = view.tone;
-      return;
-    }
+  const setStatus = (view: { readonly text: string; readonly tone: SaveView['tone'] }): void => {
     status.textContent = view.text;
     status.dataset.tone = view.tone;
   };
@@ -130,18 +183,18 @@ export function createSaveChannel(doc: Document, options: SaveChannelOptions): S
   const storage = (): SaveStorage | null => resolveStorage();
 
   const requestSave = (): void => {
-    if (disposed || resetPending) return;
+    if (disposed || resetPending || !policy.allowStorage) return;
     options.send({ type: 'save/request' });
   };
 
   const requestRestore = (): void => {
-    if (disposed) return;
+    if (disposed || !policy.allowStorage) return;
     options.send({ type: 'save/restore' });
     flash('读取中…', 'info');
   };
 
   const requestNewGame = (): void => {
-    if (disposed || resetPending) return;
+    if (disposed || resetPending || !policy.allowStorage) return;
     resetPending = true;
     options.send({ type: 'save/new', confirm: true });
     flash('正在清空存档…', 'info', 8000);
@@ -153,6 +206,15 @@ export function createSaveChannel(doc: Document, options: SaveChannelOptions): S
 
   const handleMessage = (message: unknown): boolean => {
     if (!isRecord(message) || typeof message.type !== 'string') return false;
+    if (!policy.allowStorage) {
+      // off 模式：引擎若仍发起读档/写入（例如服务端自动恢复），一律不碰存储。
+      if (message.type === 'save/read') {
+        options.send({ type: 'save/data', found: false });
+        return true;
+      }
+      if (message.type === 'save/write' || message.type === 'save/clear') return true;
+      return false;
+    }
     if (message.type === 'save/write') {
       const data = typeof message.data === 'string' ? message.data : null;
       if (data === null) {
@@ -213,9 +275,14 @@ export function createSaveChannel(doc: Document, options: SaveChannelOptions): S
 
   const onStateApplied = (save: PersistenceSnapshot | null): void => {
     if (disposed) return;
+    if (policy.fixedStatusText !== null) {
+      // off 模式：页脚固定显示「测试模式：不写存档」，不让引擎快照覆盖。
+      setStatus({ text: policy.fixedStatusText, tone: 'muted' });
+      return;
+    }
     // 启动自动读取存档：等存档服务就绪（save 字段非 null）后才发命令；
     // 无存档时引擎保持初始状态（不会报错）。
-    if (!restoreRequested && save !== null) {
+    if (policy.autoRestore && !restoreRequested && save !== null) {
       restoreRequested = true;
       requestRestore();
     }
@@ -230,10 +297,17 @@ export function createSaveChannel(doc: Document, options: SaveChannelOptions): S
   const onVisibilityChange = (): void => {
     if (doc.visibilityState === 'hidden') requestSave();
   };
-  doc.addEventListener('visibilitychange', onVisibilityChange);
-  const timer = globalThis.setInterval?.(() => requestSave(), AUTOSAVE_INTERVAL_MS);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  if (policy.autosave) {
+    doc.addEventListener('visibilitychange', onVisibilityChange);
+    timer = globalThis.setInterval?.(() => requestSave(), AUTOSAVE_INTERVAL_MS);
+  }
 
-  setStatus(buildSaveView(null));
+  if (policy.fixedStatusText !== null) {
+    setStatus({ text: policy.fixedStatusText, tone: 'muted' });
+  } else {
+    setStatus(buildSaveView(null));
+  }
 
   return {
     element,

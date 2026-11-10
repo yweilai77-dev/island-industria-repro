@@ -29,6 +29,11 @@ import {
   projectSignature,
   saveSignature,
 } from '../game-ui-bridge/panel-signatures.ts';
+import {
+  OFF_MODE_STATUS_TEXT,
+  resolveSaveMode,
+  savePolicyOf,
+} from '../frontend/frontend-save-channel.ts';
 import { createTechState, techSnapshotOf } from '../tech/state.ts';
 import type { EndgameSnapshot } from '../endgame/endgame-types.ts';
 import type { DiagnosticsSnapshot } from '../diagnostics/diagnostics-types.ts';
@@ -252,8 +257,8 @@ describe('service snapshot views', () => {
     expect(view?.proof.stateLabel).toBe('未开始');
     expect(view?.proof.remainingSeconds).toBe(60);
     expect(view?.proof.conditions).toHaveLength(2);
-    // 交付未齐，与服务端 beginProof 的 delivery-incomplete 拒绝条件对齐 → 按钮禁用。
-    expect(view?.canBegin).toBe(false);
+    // 交付未齐也允许先跑运行证明（两个条件独立；完成仍要求两者）。
+    expect(view?.canBegin).toBe(true);
     expect(view?.canCancel).toBe(false);
     expect(view?.banner).toBeNull();
     expect(view?.blocks).toEqual(['交付未完成：还差 7 件']);
@@ -273,14 +278,15 @@ describe('service snapshot views', () => {
     expect(view?.canCancel).toBe(false);
   });
 
-  it('allows begin only when unlocked and the delivery is complete', () => {
-    const ready: EndgameSnapshot = {
-      ...ENDGAME,
-      delivery: { ...ENDGAME.delivery, complete: true },
-    };
+  it('allows begin independently of the delivery, but not before unlock', () => {
+    // 交付未齐（ENDGAME）也允许先跑证明。
+    expect(buildProjectView(ENDGAME, new Map())?.canBegin).toBe(true);
+    const ready: EndgameSnapshot = { ...ENDGAME, delivery: { ...ENDGAME.delivery, complete: true } };
     expect(buildProjectView(ready, new Map())?.canBegin).toBe(true);
     const notUnlocked: EndgameSnapshot = { ...ready, unlocked: false };
     expect(buildProjectView(notUnlocked, new Map())?.canBegin).toBe(false);
+    const completed: EndgameSnapshot = { ...ready, completed: true };
+    expect(buildProjectView(completed, new Map())?.canBegin).toBe(false);
   });
 
   it('allows cancel only while the proof window is running', () => {
@@ -338,6 +344,36 @@ describe('service snapshot views', () => {
     expect(parseSaveSnapshot(null)).toBeNull();
     expect(parseSaveSnapshot({ status: 'bogus' })).toBeNull();
     expect(parseSaveSnapshot(JSON.parse(JSON.stringify(SAVE)))?.hasSave).toBe(true);
+  });
+});
+
+describe('save mode resolution (wave-2 防跨会话恢复污染)', () => {
+  it('classifies real players, isolated scripts and legacy scripts', () => {
+    // 无 __II_TEST_FLAGS__ = 真实玩家：持久化档。
+    expect(resolveSaveMode(undefined)).toBe('persistent');
+    // 带 saveStorageKey = 隔离档（p2e3 存档验收）。
+    expect(resolveSaveMode({ saveStorageKey: 'p2e3-save/slot' })).toBe('isolated');
+    // 有 flags 但没有 saveStorageKey = 旧验收脚本（p2b/p2c/m18c/endgame/E1）：关闭存档。
+    expect(resolveSaveMode({})).toBe('off');
+    expect(resolveSaveMode({ saveStorageKey: '' })).toBe('off');
+    expect(resolveSaveMode({ progression: 'legacy' })).toBe('off');
+    expect(resolveSaveMode({ progression: 'player', techHooks: true })).toBe('off');
+    expect(resolveSaveMode({ progression: 'player', techHooks: true, saveStorageKey: 'p2e3/slot' }))
+      .toBe('isolated');
+  });
+
+  it('disables every storage behaviour in off mode', () => {
+    const persistent = savePolicyOf('persistent');
+    expect(persistent).toEqual({ allowStorage: true, autoRestore: true, autosave: true, fixedStatusText: null });
+    expect(savePolicyOf('isolated')).toEqual(persistent);
+    const off = savePolicyOf('off');
+    expect(off).toEqual({
+      allowStorage: false,
+      autoRestore: false,
+      autosave: false,
+      fixedStatusText: OFF_MODE_STATUS_TEXT,
+    });
+    expect(OFF_MODE_STATUS_TEXT).toBe('测试模式：不写存档');
   });
 });
 

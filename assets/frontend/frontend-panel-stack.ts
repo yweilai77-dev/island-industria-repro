@@ -2,7 +2,7 @@ import type { UiState } from './frontend-ui-protocol.ts';
 import { createTabShell, type TabShell, type UiTabDef } from './frontend-tab-shell.ts';
 import { createTechPanel, type TechPanelHandle } from './frontend-tech-panel.ts';
 import { createDiagnosticsPanel, createProjectPanel } from './frontend-service-panel.ts';
-import { createSaveChannel, type SaveChannelHandle } from './frontend-save-channel.ts';
+import { createSaveChannel, type SaveChannelHandle, type SaveMode } from './frontend-save-channel.ts';
 import { buildDiagnosticsView, buildProjectView } from './frontend-service-view.ts';
 import { buildTechView, describeTechError, type TechView } from './frontend-tech-view.ts';
 
@@ -26,6 +26,8 @@ export interface PanelStackOptions {
   showError(text: string): void;
   /** 测试脚手架可覆盖存档键（验收脚本隔离真实存档）。 */
   readonly saveStorageKey?: string;
+  /** 存档模式：真实玩家 persistent / 隔离档 isolated / 旧验收脚本 off。 */
+  readonly saveMode?: SaveMode;
 }
 
 export interface PanelStackHandle {
@@ -61,7 +63,11 @@ export function createPanelStack(doc: Document, options: PanelStackOptions): Pan
   });
   const diagnosticsPanel = createDiagnosticsPanel(doc);
   const projectPanel = createProjectPanel(doc, { send: options.send });
-  const saveChannel = createSaveChannel(doc, { send: options.send, storageKey: options.saveStorageKey });
+  const saveChannel = createSaveChannel(doc, {
+    send: options.send,
+    storageKey: options.saveStorageKey,
+    mode: options.saveMode,
+  });
   options.frame.appendChild(saveChannel.element);
 
   const tabs: TabShell = createTabShell(doc, {
