@@ -1,6 +1,4 @@
-// P2-E3 工作包 F 共用工具：真实键鼠/真实事务，唯一读取 GameRead `mechanical`；
-// 仅允许 __II_TEST_TECH__ / __II_TEST_ENDGAME__（同 UI 协议，不注入物品/进度/标记）。
-import { createP2dCtx } from './p2d-assembly-lib.mjs';
+// P2-E3/F 共用工具：真实键鼠/事务，唯一读取 GameRead `mechanical`；仅允许 __II_TEST_TECH__/__II_TEST_ENDGAME__。import { createP2dCtx } from './p2d-assembly-lib.mjs';
 import { createOrderKit } from './m20-order-lib.mjs';
 
 /** 快捷栏槽位（正式起步包绑定）。 */
@@ -48,24 +46,24 @@ export const LAYOUT_FINAL = [
 ];
 export const FRAMES_FINAL = [{ gx: -4, gz: 7 }, { gx: -3, gz: 7 }, { gx: -2, gz: 7 }];
 
-export const PLAYER_SPOT_EARLY = { gx: -7, gz: 7 };
 
+const R = (inCount, outItem, outCount, seconds) => ({ inItem: 'iron_ingot', inCount, outItem, outCount, seconds });
 export const RECIPES = {
-  'forge-shaft': { inItem: 'iron_ingot', inCount: 2, outItem: 'shaft', outCount: 1, seconds: 5 },
-  'forge-vertical-drive': { inItem: 'iron_ingot', inCount: 3, outItem: 'vertical_drive', outCount: 1, seconds: 6 },
-  'forge-chute': { inItem: 'iron_ingot', inCount: 2, outItem: 'chute', outCount: 1, seconds: 4 },
-  'forge-interface-box': { inItem: 'iron_ingot', inCount: 2, outItem: 'interface_box', outCount: 1, seconds: 5 },
-  'forge-output-box': { inItem: 'iron_ingot', inCount: 2, outItem: 'output_interface_box', outCount: 1, seconds: 5 },
-  'forge-splitter-box': { inItem: 'iron_ingot', inCount: 3, outItem: 'splitter_box', outCount: 1, seconds: 6 },
-  'forge-merger-box': { inItem: 'iron_ingot', inCount: 3, outItem: 'merger_box', outCount: 1, seconds: 6 },
-  'forge-crusher': { inItem: 'iron_ingot', inCount: 6, outItem: 'crusher', outCount: 1, seconds: 8 },
-  'forge-smelter': { inItem: 'iron_ingot', inCount: 7, outItem: 'smelter', outCount: 1, seconds: 9 },
-  'forge-processing-core': { inItem: 'iron_ingot', inCount: 8, outItem: 'forge', outCount: 1, seconds: 10 },
-  'forge-structure-frame': { inItem: 'iron_ingot', inCount: 3, outItem: 'structure_frame', outCount: 1, seconds: 5 },
-  'forge-gear-12': { inItem: 'iron_ingot', inCount: 1, outItem: 'gear_12', outCount: 2, seconds: 4 },
-  'forge-gear-24': { inItem: 'iron_ingot', inCount: 1, outItem: 'gear_24', outCount: 1, seconds: 5 },
-  'forge-flywheel': { inItem: 'iron_ingot', inCount: 12, outItem: 'flywheel_source', outCount: 1, seconds: 12 },
-  'forge-batch-shaft': { inItem: 'iron_ingot', inCount: 4, outItem: 'shaft', outCount: 2, seconds: 7 },
+  'forge-shaft': R(2, 'shaft', 1, 5),
+  'forge-vertical-drive': R(3, 'vertical_drive', 1, 6),
+  'forge-chute': R(2, 'chute', 1, 4),
+  'forge-interface-box': R(2, 'interface_box', 1, 5),
+  'forge-output-box': R(2, 'output_interface_box', 1, 5),
+  'forge-splitter-box': R(3, 'splitter_box', 1, 6),
+  'forge-merger-box': R(3, 'merger_box', 1, 6),
+  'forge-crusher': R(6, 'crusher', 1, 8),
+  'forge-smelter': R(7, 'smelter', 1, 9),
+  'forge-processing-core': R(8, 'forge', 1, 10),
+  'forge-structure-frame': R(3, 'structure_frame', 1, 5),
+  'forge-gear-12': R(1, 'gear_12', 2, 4),
+  'forge-gear-24': R(1, 'gear_24', 1, 5),
+  'forge-flywheel': R(12, 'flywheel_source', 1, 12),
+  'forge-batch-shaft': R(4, 'shaft', 2, 7),
 };
 
 const TECH_NODES = {
@@ -150,7 +148,6 @@ export function createP2f(play, h) {
       { gx: flywheelCell.gx + 1, gz: flywheelCell.gz },
       { gx: flywheelCell.gx - 1, gz: flywheelCell.gz },
       { gx: flywheelCell.gx, gz: flywheelCell.gz + 1 },
-      { gx: flywheelCell.gx, gz: flywheelCell.gz - 1 },
     ];
     let reached = false;
     for (const spot of candidates) {
@@ -383,8 +380,20 @@ export function createP2f(play, h) {
     onPart: wrapAfterCalibration('onPart', 'ONPART'),
     feedMachine: async (cell, partId, times) => {
       await calibrateIfMoved('FEED');
-      await C.feedMachine(cell, partId, 0);
       for (let index = 0; index < times; index += 1) {
+        let s = await state();
+        // hover 可能落在相邻机器上：先校验 hoveredPartId，不对就重新 hover 再按。
+        if (s.ui?.hoveredPartId !== partId) {
+          let hovered = false;
+          for (let attempt = 0; attempt < 3; attempt += 1) {
+            try { await C.hoverPart(cell, partId); } catch (error) { /* 下一轮重标定后再试 */ }
+            await play.wait(100);
+            s = await state();
+            if (s.ui?.hoveredPartId === partId) { hovered = true; break; }
+            await calibrateIfMoved('FEED-' + attempt);
+          }
+          if (!hovered) continue;
+        }
         await play.keyboard.hold('KeyC', 60);
         await play.advance(0.12);
       }

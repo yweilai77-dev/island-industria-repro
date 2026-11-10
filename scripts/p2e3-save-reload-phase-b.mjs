@@ -54,7 +54,11 @@ export async function runPhaseB({ play, kit, helpers, saved }) {
     for (const expected of savedParts) {
       const actual = liveParts.find((part) => part.id === expected.id);
       assert(actual !== undefined, 'missing restored part id ' + expected.id + ' (' + expected.kind + ')');
-      assert(actual.kind === expected.kind, 'part ' + expected.id + ' kind mismatch: ' + actual.kind + ' vs ' + expected.kind);
+      // 唯一 GameRead 的 parts[].kind 是「零件类别」（machine/gear/shaft/power-source/transport），
+      // 不是 def.id；所以这里按类别可比的映射校验，具体 kind 的往返由 save-slices.test.ts 覆盖。
+      const expectedCategory = { crusher: 'machine', smelter: 'machine', forge: 'machine', flywheel_source: 'power-source', shaft: 'shaft', gear_12: 'gear', gear_24: 'gear', chute: 'transport', vertical_drive: 'transport', machine: 'machine', power_source: 'power-source', structure_frame: 'structure' }[expected.kind];
+      assert(actual.kind === expectedCategory || actual.partKind === expected.kind,
+        'part ' + expected.id + ' kind mismatch: ' + actual.kind + ' vs ' + expected.kind);
       assert(actual.gx === expected.gx && actual.gz === expected.gz && actual.rotation === expected.rotation && actual.level === expected.level,
         'part ' + expected.id + ' placement mismatch: ' + JSON.stringify(actual) + ' vs ' + JSON.stringify(expected));
     }

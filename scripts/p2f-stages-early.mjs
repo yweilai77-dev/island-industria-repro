@@ -1,7 +1,5 @@
 // M2.0-P2-E3 工作包 F：阶段 0/1/2（教学订单 → T1.x → T2.x）+ 阶段 A→B 布局迁移。
-import {
-  TECH_NODES, LAYOUT_EARLY, LAYOUT_FINAL, FRAMES_FINAL, PLAYER_SPOT_EARLY, SLOT,
-} from './p2f-lib.mjs';
+import { TECH_NODES, LAYOUT_EARLY, LAYOUT_FINAL, FRAMES_FINAL, SLOT } from './p2f-lib.mjs';
 
 const ORE_A = { gx: -6, gz: 4 };
 const ORE_B = { gx: 3, gz: -4 };
@@ -10,7 +8,7 @@ const ORE_D = { gx: 12, gz: 10 };
 const CHUTE_CELL = { gx: -2, gz: 8 };
 const SMELTER_CELL = { gx: -2, gz: 9 };
 const DOCK_CELL = { gx: -2, gz: 8 };
-const PLAYER_SPOT = PLAYER_SPOT_EARLY;
+const PLAYER_SPOT = { gx: -7, gz: 7 };
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export async function runEarlyStages(play, F) {
@@ -106,14 +104,35 @@ export async function runEarlyStages(play, F) {
     const crusherCell = cellOfMachine(s, crusherId);
     const smelterCell = cellOfMachine(s, smelterId);
     const forgeCell = cellOfMachine(s, forgeId);
+    const machineOf = (now, id) => now.production.machines.find((machine) => machine.partId === id);
+    /** 状态驱动：直到真实产出达标；每轮若输入为空就重新投料（防 hover/丢键）。 */
+    const produceUntil = async (itemId, target, feeder, label, maxGame = 120) => {
+      for (let elapsed = 0; elapsed <= maxGame; elapsed += 4) {
+        const now = await state();
+        if (producedCount(now, itemId) >= target) return now;
+        await feeder(now);
+        await play.advance(4);
+      }
+      const now = await state();
+      throw new Error(label + ' timeout; machines=' + JSON.stringify(now.production.machines)
+        + ' produced=' + JSON.stringify(now.production.produced));
+    };
     await F.feedMachine(crusherCell, crusherId, 4);
-    await F.advanceUntil('order crush', (now) => producedCount(now, 'crushed_ore') >= 4, 40);
+    await produceUntil('crushed_ore', 4, async (now) => {
+      if (machineOf(now, crusherId).inputCount === 0) await F.feedMachine(crusherCell, crusherId, 4);
+    }, 'order crush', 60);
     await F.collectMachine(crusherCell, crusherId, 1);
     await F.feedMachine(smelterCell, smelterId, 4);
-    await F.advanceUntil('order smelt', (now) => producedCount(now, 'iron_ingot') >= 4, 60);
+    await produceUntil('iron_ingot', 4, async (now) => {
+      const smelter = machineOf(now, smelterId);
+      if (smelter.inputCount === 0 && countOf(now, 'crushed_ore') > 0) await F.feedMachine(smelterCell, smelterId, 4);
+    }, 'order smelt', 120);
     await F.collectMachine(smelterCell, smelterId, 1);
     await F.feedMachine(forgeCell, forgeId, 2);
-    await F.advanceUntil('order forge shaft', (now) => producedCount(now, 'shaft') >= 1, 30);
+    await produceUntil('shaft', 1, async (now) => {
+      const forge = machineOf(now, forgeId);
+      if (forge.inputCount < 2 && countOf(now, 'iron_ingot') >= 2) await F.feedMachine(forgeCell, forgeId, 2);
+    }, 'order forge', 60);
     await F.collectMachine(forgeCell, forgeId, 1);
     s = await state();
     const ui = await kit.readUi();
