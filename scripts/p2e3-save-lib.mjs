@@ -7,7 +7,9 @@
 //      （元素常驻 DOM，用 DOM click() 触发，不依赖模态框是否可见）。
 
 export const SAVE_HOOK = '__II_TEST_SAVE__';
-export const SAVE_KEY = 'island-industria/p2e3-save-reload';
+// 每次运行使用唯一 isolated key：绝不读到上一次运行/本局更早 autosave 的旧存档。
+// Date.now() 在模块加载时求值一次，同一次 play 的所有 phase 共用同一个 key。
+export const SAVE_KEY = 'island-industria/p2e3-save-reload/' + Date.now();
 export const NODE_GEAR = 'tech:gear-manufacture';
 export const EXPECTED_PARTS = 11;
 // 体积上限：设计文档估算中型工厂 < 20 KB；这里留 3 倍余量防回归。

@@ -231,16 +231,44 @@ export async function runPhaseA({ play, h, kit, helpers }) {
     assert(stopped.sources[0].enabled === false, 'power source must be off before the deterministic save');
     beforeReload = stopped;
     await triggerSave();
-    // 保存是异步通道：轮询到存档出现且包含本次世界的关键字段。
+    // 保存是异步通道：轮询到「内容确实是本次世界」的存档，而不是「非空就收」。
+    // 原因：isolated 分档下 autosave/tech 提交保存可能在本次手动保存之前已写入该 key，
+    // 第一份非空快照可能是更早的世界（没有 T1.1 解锁）。校验失败就再触发一次保存（幂等）。
     const started = Date.now();
     let raw = null;
+    let attempts = 0;
     while (Date.now() - started < 20000) {
+      attempts += 1;
       raw = await readRawSave();
-      if (typeof raw === 'string' && raw.length > 0) break;
+      if (typeof raw === 'string' && raw.length > 0) {
+        try {
+          const candidate = parseSave(raw);
+          const sourcesFrozen = Array.isArray(candidate.sources)
+            && candidate.sources.length > 0
+            && candidate.sources.every((source) => source.enabled === false);
+          const hasBuilding = Array.isArray(candidate.buildings) && candidate.buildings.length === 1;
+          if (candidate.parts.length === EXPECTED_PARTS
+            && hasBuilding
+            && Array.isArray(candidate.tech?.unlocked)
+            && candidate.tech.unlocked.includes(NODE_GEAR)
+            && sourcesFrozen) {
+            saved = candidate;
+            break;
+          }
+          console.log('P2E3-SAVE-RETRY stale snapshot: parts=' + String(candidate.parts?.length)
+            + ' tech=' + JSON.stringify(candidate.tech?.unlocked)
+            + ' sourcesFrozen=' + String(sourcesFrozen) + ' buildings=' + String(candidate.buildings?.length));
+        } catch (error) {
+          console.log('P2E3-SAVE-RETRY unparsable snapshot: ' + String(error && error.message));
+        }
+      }
+      await triggerSave();
       await play.advance(0.2);
       await sleep(120);
     }
-    saved = parseSave(raw);
+    assert(saved !== null,
+      'save must eventually contain the current world (parts=' + EXPECTED_PARTS
+        + ', tech includes ' + NODE_GEAR + ', power source off after ' + attempts + ' attempts)');
     const size = new TextEncoder().encode(raw).length;
     assert(size < MAX_SAVE_BYTES, 'save must stay under ' + MAX_SAVE_BYTES + ' bytes, got ' + size);
     // 写入内容必须就是当前真实世界（不是默认世界）。
