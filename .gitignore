@@ -17,3 +17,5 @@ artifacts/
 
 # 打包产物
 release/
+# 验收运行的临时日志/锁目录（play 串行窗口用，不入库）
+.verify/
