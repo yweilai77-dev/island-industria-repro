@@ -1,4 +1,4 @@
-// P2-E2/B：player 段验证 diagnostics=null 门控；legacy 段真实产线制造三种阻塞并断言诊断镜像。
+// P2-E2/B：player 段验证 diagnostics=null；legacy 段真实产线制造三种阻塞并断言诊断镜像。
 import { createHarness } from './m18-helpers.mjs';
 import { enterLegacyMode } from './legacy-mode.mjs';
 import { createCtx, LAYOUT_F } from './p2c-links-lib.mjs';
@@ -95,7 +95,7 @@ export default async function playthrough(play) {
       return true;
     });
     if (cleared) {
-      // 「清空存档并重开」会触发前端 location.reload()：此时不能 advance，
+      // 清档会触发前端 reload：不能 advance，
       // 只做 wait + 显式 reload（幂等）+ 轮询 state 直到 tech 可读。
       for (let attempt = 0; attempt < 3; attempt += 1) {
         try {
@@ -192,7 +192,6 @@ export default async function playthrough(play) {
     }
     s = await state();
     assert(countOf(s, 'iron_ingot') >= 8, 'expected at least 8 ingots for the batch recipe, got ' + countOf(s, 'iron_ingot'));
-    log('04-INGOTS', { ingots: countOf(s, 'iron_ingot') });
   });
 
   await play.step('05-batch-recipe-multi-output', async () => {
@@ -229,7 +228,6 @@ export default async function playthrough(play) {
     const crusherId = machineOf(s, 'crush-iron-ore').partId;
     const smelterId = machineOf(s, 'smelt-crushed-ore').partId;
     const forgeId = s.production.machines.find((entry) => entry.recipeId?.startsWith('forge-')).partId;
-    // 输出盒/输入盒：破碎机→熔炼炉→锻压机
     await onPart(CRUSHER_CELL, crusherId, 'KeyO');
     await onPart(SMELTER_CELL, smelterId, 'KeyT');
     await onPart(SMELTER_CELL, smelterId, 'KeyO');
@@ -242,28 +240,38 @@ export default async function playthrough(play) {
     assert(s.links.length === 2 && s.links.every((link) => link.active === true), 'two active material links expected');
     assert(portsOf(s, crusherId).length === 1 && portsOf(s, smelterId).length === 2 && portsOf(s, forgeId).length === 1,
       'each machine must have its interface boxes installed');
-    // 切回单件 forge-shaft。
     for (let guard = 0; guard < 20 && machineById(await state(), forgeId).recipeId !== 'forge-shaft'; guard += 1) {
       await cycleRecipeAt(FORGE_CELL, forgeId);
     }
     s = await state();
     assert(machineById(s, forgeId).recipeId === 'forge-shaft', 'forge must be back on forge-shaft');
-    // 2 矿走完三级链路（接口盒 + MaterialLink 真实传递）。
+    await enableAllSources(LAYOUT_F);
     const forgeBefore = machineById(s, forgeId).producedTotal;
     await feedMachine(CRUSHER_CELL, crusherId, 2);
     const chain = await waitFor((now) => machineById(now, forgeId).producedTotal > forgeBefore, 60, 'chain');
     assert(chain.ok, 'the linked line must complete the full chain');
-    s = chain.state;
+    let healthy = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+      s = await state();
+      const view = diag(s);
+      if (view !== null && view.summary.powered >= 1
+        && view.machines.some((machine) => machine.running === true || machine.block === 'ok')) {
+        healthy = view;
+        break;
+      }
+      const crusher = machineById(s, crusherId);
+      if (crusher.inputCount === 0 && countOf(s, 'iron_ore') >= 2) await feedMachine(CRUSHER_CELL, crusherId, 2);
+      await play.advance(0.5);
+    }
+    assert(healthy !== null, 'no healthy machine within 20s; diagnostics=' + JSON.stringify(diag(await state())));
     const d = assertDiagnosticsMirror(s, 'chain');
-    assert(d.links.every((link) => link.severity === 'ok'), 'both links must report ok while delivering material');
-    assert(d.machines.some((machine) => machine.severity === 'ok'), 'at least one machine must be reported as healthy');
-    await shot('06-linked-diagnostics-empty');
+    assert(healthy.summary.powered === 3, 'all three machines must be powered, got ' + healthy.summary.powered);
+    assert(d.links.every((link) => link.severity === 'ok'), 'both links must report ok while delivering');
   });
 
   await play.step('07-real-blockage-no-input', async () => {
     let s = await state();
     const crusherId = machineOf(s, 'crush-iron-ore').partId;
-    // 让链路把料吃完：破碎机没有输入 → 缺料。
     const starved = await waitFor((now) => now.production.machines.every((m) => m.block === 'no-input'), 90, 'starve');
     assert(starved.ok, 'all machines must run dry after the chain consumed its input');
     s = starved.state;
@@ -294,7 +302,6 @@ export default async function playthrough(play) {
   });
 
   await play.step('09-real-blockage-downstream-full', async () => {
-    // 只停锻压机动力：上游继续生产 → 输入盒/上游输出盒填满 → 连接阻塞 + 输出满载。
     let s = await state();
     const forgeId = machineById(s, machineOf(s, 'forge-shaft').partId).partId;
     const forgeSourceId = s.sources.find((source) => {
@@ -330,7 +337,6 @@ export default async function playthrough(play) {
       'bottleneck must describe the downstream blockage, got ' + JSON.stringify(d.bottleneck));
     await shot('09-diagnostics-downstream-full');
 
-    // 恢复动力并取走产物 → 阻塞必须自行解除（不丢料）。
     await setSource({ gx: -1, gz: 7 }, forgeSourceId, true);
     let recovered = null;
     for (let attempt = 0; attempt < 24; attempt += 1) {
