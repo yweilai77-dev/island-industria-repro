@@ -13,6 +13,7 @@ import { createHarness } from './m18-helpers.mjs';
 import { createP2f, TECH_NODES } from './p2f-lib.mjs';
 import { runEarlyStages } from './p2f-stages-early.mjs';
 import { runLateStages } from './p2f-stages-late.mjs';
+import { installPlayWatchdog } from './p2f-watchdog.mjs';
 
 /** 每次运行一个隔离存档键：既有真实存档/上次失败运行的残留都不会被自动读档。 */
 const SAVE_KEY = 'p2f/full-playthrough/' + Date.now();
@@ -25,6 +26,7 @@ const FORBIDDEN_IN_KIT = ['interface_box', 'output_interface_box', 'splitter_box
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
 export default async function playthrough(play) {
+  installPlayWatchdog(play);
   const h = createHarness(play);
   await play.page.addInitScript((key) => {
     globalThis.__II_TEST_FLAGS__ = { progression: 'player', techHooks: true, saveStorageKey: key };

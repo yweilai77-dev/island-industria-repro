@@ -177,17 +177,41 @@ export function createCtx(play, h) {
     throw new Error('could not place ' + label + ' with rotation ' + rotation);
   };
 
+  /**
+   * 布局放置：
+   * 1) **由远及近**（离玩家远的格子先放）——近处零件会遮挡远处格子的射线，
+   *    这是「某个格子永远瞄不到」的真实原因之一；
+   * 2) 单个格子失败时重标定一次；再失败就换一个观察位（走到布局外侧）重标定重试，
+   *    避免整条长流程被一次遮挡报废。
+   */
   const placeLayout = async (layout) => {
-    for (const item of layout) {
-      let pt;
-      try {
-        pt = await aim(item.cell);
-      } catch (error) {
-        // 相机/标定漂移时重新标定一次再试（不改变任何游戏状态）。
-        console.log('PLACE-RECAL ' + item.label + ' reason=' + error.message);
-        await calibrate('RECAL-' + item.label);
-        pt = await aim(item.cell);
+    // 保持脚本作者调过的原始顺序（按遮挡经验排列）；重排会制造新的互相遮挡。
+    const ordered = layout;
+    const vantageCandidates = (cell) => [
+      { gx: cell.gx - 3, gz: cell.gz + 2 }, { gx: cell.gx - 3, gz: cell.gz - 2 },
+      { gx: cell.gx + 3, gz: cell.gz + 2 }, { gx: cell.gx + 3, gz: cell.gz - 2 },
+      { gx: cell.gx, gz: cell.gz + 4 }, { gx: cell.gx, gz: cell.gz - 4 },
+    ];
+    for (const item of ordered) {
+      let pt = null;
+      for (let attempt = 0; attempt < 4 && pt === null; attempt += 1) {
+        try {
+          pt = await aim(item.cell);
+        } catch (error) {
+          console.log('PLACE-RECAL ' + item.label + ' attempt=' + attempt + ' reason=' + error.message);
+          if (attempt === 0) {
+            await calibrate('RECAL-' + item.label);
+          } else {
+            // 换观察位：走到布局外侧的空地，再重新标定（不改变任何游戏状态）。
+            for (const spot of vantageCandidates(item.cell)) {
+              if (await h.gotoCell(spot, 6000, false)) break;
+            }
+            await h.clearHover();
+            await calibrate('VANTAGE-' + item.label + '-' + attempt);
+          }
+        }
       }
+      if (pt === null) throw new Error('cannot aim at layout cell ' + JSON.stringify(item.cell) + ' (' + item.label + ')');
       points[item.label] = pt;
       await placeRotated(pt, item.slot, item.rot, item.label, item.cell);
     }

@@ -1,5 +1,6 @@
 // M2.0-P2-E3 工作包 F：阶段 0/1/2（教学订单 → T1.x → T2.x）+ 阶段 A→B 布局迁移。
 import { TECH_NODES, LAYOUT_EARLY, LAYOUT_FINAL, FRAMES_FINAL, SLOT } from './p2f-lib.mjs';
+import { trace } from './p2f-trace.mjs';
 
 const ORE_A = { gx: -6, gz: 4 };
 const ORE_B = { gx: 3, gz: -4 };
@@ -11,7 +12,7 @@ const DOCK_CELL = { gx: -2, gz: 8 };
 const PLAYER_SPOT = { gx: -7, gz: 7 };
 
 /** @param {import('@forgeax/engine/devkit').PlayContext} play */
-export async function runEarlyStages(play, F) {
+export async function runEarlyStages(play, F, options = {}) {
   const { assert, state, countOf, h, log, calibrate, placeLayout, placeFrameAt, onPart, shot,
     waitFor, removePart, removeAllParts, aim, placeRotated, ensureHotbar, windBoth,
     runManualRounds, runAutoRounds, craft, ensureDelivery, submitTech, nodeOf, nodeStatus,
@@ -87,12 +88,25 @@ export async function runEarlyStages(play, F) {
     await calibrate('EARLY-WORK');
     await placeLayout(LAYOUT_EARLY);
     F.setWorkSpot(PLAYER_SPOT);
+    // 旧代码写 ensurePower(999)：飞轮容量只有 300，这个阈值永远达不到，
+    // 于是每轮都尝试「走到飞轮邻格补能」，被自己刚建的机器挡住 → 误报无法摇柄。
+    // 正确做法：把驱动网络的飞轮补到接近满能量（阈值会被 ensurePower 钳制到容量-20）。
     await F.ensurePower(999);
+    await F.windBoth(6500);
     const s = await waitMachines(3, 'early-line-power');
     assert(s.parts.length === LAYOUT_EARLY.length, 'expected ' + LAYOUT_EARLY.length + ' parts, got ' + s.parts.length);
     assert(s.networks.length === 1 && s.networks[0].status === 'powered', 'single powered network expected');
     log('02-LINE', { parts: s.parts.length, machines: s.production.machines.map((m) => m.recipeId), network: s.networks[0].status });
     await shot('02-early-line');
+    if (options.stopAfterStep === '02-advance') {
+      // 判别实验：不再做任何投料/摇柄，只连续推进游戏时间，看 advance 是否仍会卡死。
+      for (let index = 0; index < 60; index += 1) {
+        trace('ADVANCE-ONLY', { index });
+        await play.advance(1);
+      }
+      trace('ADVANCE-ONLY-DONE');
+      return;
+    }
   });
 
   // ------------------------------------------------------------------
@@ -105,29 +119,56 @@ export async function runEarlyStages(play, F) {
     const smelterCell = cellOfMachine(s, smelterId);
     const forgeCell = cellOfMachine(s, forgeId);
     const machineOf = (now, id) => now.production.machines.find((machine) => machine.partId === id);
+    const machineByRecipeId = (now, itemId) => {
+      const prefix = itemId === 'crushed_ore' ? 'crush' : itemId === 'iron_ingot' ? 'smelt' : 'forge';
+      return now.production.machines.find((machine) => (machine.recipeId ?? '').startsWith(prefix)) ?? null;
+    };
     /** 状态驱动：直到真实产出达标；每轮若输入为空就重新投料（防 hover/丢键）。 */
     const produceUntil = async (itemId, target, feeder, label, maxGame = 120) => {
+      const wallStarted = Date.now();
+      const wallBudgetMs = Math.max(120000, maxGame * 2500);
       for (let elapsed = 0; elapsed <= maxGame; elapsed += 4) {
         const now = await state();
         if (producedCount(now, itemId) >= target) return now;
+        if (Date.now() - wallStarted > wallBudgetMs) {
+          const stalled = await state();
+          throw new Error(label + ' wall-timeout after ' + Math.round((Date.now() - wallStarted) / 1000)
+            + 's wall (game ' + elapsed + 's); machines=' + JSON.stringify(stalled.production.machines)
+            + ' produced=' + JSON.stringify(stalled.production.produced) + ' sources=' + JSON.stringify(stalled.sources));
+        }
         // P2-E3 兼容性：每轮先维持动力（能量耗尽会让加工冻结，表现为「产出超时」）。
+        const mach = machineByRecipeId(now, itemId);
+        trace('TICK ' + label, { elapsed, produced: producedCount(now, itemId), target, input: mach?.inputCount ?? null, output: mach?.outputCount ?? null, block: mach?.block ?? null, hovered: now.ui?.hoveredPartId ?? null, energy: now.sources.map((e) => Math.round(e.energy ?? 0)) });
+        console.log('P2F-ORDER-PROGRESS=' + JSON.stringify({
+          label, elapsed, produced: producedCount(now, itemId), target,
+          machine: mach ? { input: mach.inputCount, output: mach.outputCount, progress: Math.round(mach.progress * 100), powered: mach.powered, block: mach.block } : null,
+          hovered: now.ui?.hoveredPartId ?? null,
+          sources: now.sources.map((entry) => ({ id: entry.partId, enabled: entry.enabled, energy: Math.round(entry.energy ?? 0) })),
+          network: now.networks.map((entry) => ({ id: entry.id, status: entry.status, rpm: Math.round(entry.speedFactor * 60) })),
+        }));
+        trace('BEFORE-POWER ' + label, { elapsed });
         await F.ensurePower();
+        trace('BEFORE-FEED ' + label, { elapsed });
         await feeder(now);
-        await play.advance(4);
+        trace('BEFORE-ADVANCE ' + label, { elapsed });
+        // 事故排查：headless/被遮挡时纯模拟步进可能得不到合成帧；强制渲染保持合成器推进。
+        await play.advance(4, { render: true });
       }
       const now = await state();
       throw new Error(label + ' timeout; machines=' + JSON.stringify(now.production.machines)
         + ' produced=' + JSON.stringify(now.production.produced));
     };
-    await F.feedMachine(crusherCell, crusherId, 4);
-    await produceUntil('crushed_ore', 4, async (now) => {
-      if (machineOf(now, crusherId).inputCount === 0) await F.feedMachine(crusherCell, crusherId, 4);
+    // 教学订单只需要「破碎 2 / 熔炼 2 / 锻压 1」：按订单需求分批，避免机器输出缓冲
+    // 一次堆满（输出满 + 无人取货的状态是长流程里出现 advance 不返回的可疑触发条件）。
+    await F.feedMachine(crusherCell, crusherId, 2);
+    await produceUntil('crushed_ore', 2, async (now) => {
+      if (machineOf(now, crusherId).inputCount === 0) await F.feedMachine(crusherCell, crusherId, 2);
     }, 'order crush', 100);
     await F.collectMachine(crusherCell, crusherId, 1);
-    await F.feedMachine(smelterCell, smelterId, 4);
-    await produceUntil('iron_ingot', 4, async (now) => {
+    await F.feedMachine(smelterCell, smelterId, 2);
+    await produceUntil('iron_ingot', 2, async (now) => {
       const smelter = machineOf(now, smelterId);
-      if (smelter.inputCount === 0 && countOf(now, 'crushed_ore') > 0) await F.feedMachine(smelterCell, smelterId, 4);
+      if (smelter.inputCount === 0 && countOf(now, 'crushed_ore') > 0) await F.feedMachine(smelterCell, smelterId, 2);
     }, 'order smelt', 120);
     await F.collectMachine(smelterCell, smelterId, 1);
     await F.feedMachine(forgeCell, forgeId, 2);
@@ -144,6 +185,10 @@ export async function runEarlyStages(play, F) {
       'tutorial order must complete, state=' + ui.state + ' completed=' + done + '/' + ui.steps.length);
     log('03-ORDER', { state: ui.state, steps: ui.steps.map((step) => step.id + ':' + (step.completed ? 'ok' : 'no')) });
     await shot('03-order-complete');
+    if (options.stopAfterStep === '03') {
+      console.log('P2F-PROBE-STOP=' + JSON.stringify({ step: '03', order: ui.state, inventory: (await state()).inventory }));
+      return;
+    }
   });
 
   // ------------------------------------------------------------------
@@ -187,8 +232,11 @@ export async function runEarlyStages(play, F) {
     await onPart(cellOfMachine(s, smelterId), smelterId, 'KeyT');
     s = await state();
     assert(s.ports.some((port) => port.partId === smelterId), 'input interface box must be installed');
-    await ensureHotbar('chute');
-    await placeRotated(await aim(CHUTE_CELL), SLOT.CHUTE, 270, 'early-chute', CHUTE_CELL);
+    // P2-F 修复：早期布局本来就放了一个朝熔炼炉的重力溜槽（阶段 0 就存在）。
+    // 装上输入接口盒后它会自动开始送料，不需要（也不能）在同一格再放一个。
+    const existingChute = (await state()).parts.find((part) => part.kind === 'transport'
+      && part.placement.gx === CHUTE_CELL.gx && part.placement.gz === CHUTE_CELL.gz);
+    assert(existingChute !== undefined, 'early line must already have the gravity chute at ' + JSON.stringify(CHUTE_CELL));
     // 自动送料：只喂破碎机，熔炼炉必须自己收到并产出铁锭。
     const smeltBefore = producedCount(await state(), 'iron_ingot');
     await runAutoRounds(1);
