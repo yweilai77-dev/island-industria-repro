@@ -99,5 +99,9 @@ describe('block glyph layout', () => {
     expect(splitDigits(40, 2)).toEqual([4, 0]);
     expect(splitDigits(0, 2)).toEqual([0, 0]);
     expect(splitDigits(7)).toEqual([7]);
+    // P2-E3：矿石供给 240 后，库存计数用三位显示。
+    expect(splitDigits(240, 3)).toEqual([2, 4, 0]);
+    expect(splitDigits(100, 3)).toEqual([1, 0, 0]);
+    expect(splitDigits(0, 3)).toEqual([0, 0, 0]);
   });
 });

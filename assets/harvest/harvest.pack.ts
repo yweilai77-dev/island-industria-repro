@@ -189,7 +189,10 @@ export const ironHarvest: Plugin = {
           { component: ChildOf, data: { parent: camera } },
         )
         .unwrap();
-      spawnBox(inventoryRoot, oreMaterial, [-0.1, 0, 0], [0.05, 0.05, 0.02]);
+      spawnBox(inventoryRoot, oreMaterial, [-0.18, 0, 0], [0.05, 0.05, 0.02]);
+      // P2-E3 平衡：铁矿总供给从 80 提高到 240，玩家身上矿石可能超过 99，
+      // 因此计数从两位扩展到三位（0–999）。这是资源平衡必需的兼容修复。
+      const hundredsDigit = createDigit(inventoryRoot, whiteMaterial, 0.07, [-0.1, 0, 0]);
       const tensDigit = createDigit(inventoryRoot, whiteMaterial, 0.07, [-0.02, 0, 0]);
       const onesDigit = createDigit(inventoryRoot, whiteMaterial, 0.07, [0.06, 0, 0]);
 
@@ -234,9 +237,12 @@ export const ironHarvest: Plugin = {
             const total = inventory.count(ITEM_IDS.IRON_ORE);
             if (total !== lastInventory) {
               lastInventory = total;
-              const digits = splitDigits(total, 2);
-              setDigit(tensDigit, total >= 10 ? digitSegments(digits[0] ?? 0) : []);
-              setDigit(onesDigit, digitSegments(digits[1] ?? 0));
+              // 三位显示：<10 只显示个位；<100 显示十位+个位；>=100 显示三位（上限 999）。
+              const capped = Math.min(Math.max(0, Math.floor(total)), 999);
+              const digits = splitDigits(capped, 3);
+              setDigit(hundredsDigit, capped >= 100 ? digitSegments(digits[0] ?? 0) : []);
+              setDigit(tensDigit, capped >= 10 ? digitSegments(digits[1] ?? 0) : []);
+              setDigit(onesDigit, digitSegments(digits[2] ?? 0));
             }
 
             // 建筑搬动期间：隐藏交互提示，取消进行中的采集，禁止开始新采集。
