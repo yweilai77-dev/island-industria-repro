@@ -131,10 +131,16 @@ export async function waitForLegacy(play) {
  *
  * 幂等：如果当前页面已经是 legacy（例如入口脚本 A 调用了另一个入口脚本 B），不重复 reload。
  */
-export async function enterLegacyMode(play) {
+export async function enterLegacyMode(play, options = {}) {
   if (!play || typeof play.page?.addInitScript !== 'function') {
     throw new Error('enterLegacyMode requires a PlayContext whose page supports addInitScript');
   }
+  /** 可选：隔离存档键（验收脚本互不污染；不传时与历史行为完全一致）。 */
+  const flags = {
+    progression: 'legacy',
+    ...(typeof options.saveStorageKey === 'string' && options.saveStorageKey.length > 0
+      ? { saveStorageKey: options.saveStorageKey } : {}),
+  };
   let current;
   try {
     current = await play.state('mechanical');
@@ -145,9 +151,9 @@ export async function enterLegacyMode(play) {
     console.log('[legacy-mode] already in legacy mode; skip reload');
     return current;
   }
-  await play.page.addInitScript(() => {
-    globalThis.__II_TEST_FLAGS__ = { progression: 'legacy' };
-  });
+  await play.page.addInitScript((value) => {
+    globalThis.__II_TEST_FLAGS__ = value;
+  }, flags);
   await settleBeforeReload(play);
   await reloadWithRetry(play);
   return waitForLegacy(play);

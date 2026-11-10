@@ -1,9 +1,11 @@
 // P2-E2/B 真实游戏验收：段1 player 能力未解锁 diagnostics=null；段2 legacy 真实三级产线
 // 制造缺料/缺动力/下游满载三种真实阻塞，断言诊断与唯一 GameRead 一致 + 批量配方产 2 件。
 import { createHarness } from './m18-helpers.mjs';
+import { enterLegacyMode } from './legacy-mode.mjs';
 import { createCtx, LAYOUT_F } from './p2c-links-lib.mjs';
 import { FORGE } from './m20-order-lib.mjs';
 
+const LEGACY_SAVE_KEY = 'p2e2/legacy-diag/' + Date.now();
 const PLAYER_FORGE_CELL = { gx: -4, gz: 9 };
 const WORK_CELL = { gx: -6, gz: 6 };
 const ORE_VIEW = { gx: -6, gz: 4 };
@@ -69,18 +71,28 @@ export default async function playthrough(play) {
   // =========================================================================
   // 段 1：player 正式模式 —— 能力未解锁时诊断必须为 null
   // =========================================================================
-  // 只注册一个 init script：模式从 localStorage 标记读取。
-  // 多个 addInitScript 会互相覆盖（player/legacy 之争曾让 legacy 段整套被跳过），
-  // 因此用持久标记驱动，reload 前后都只有一个标志来源。
-  await play.page.addInitScript(() => {
-    const mode = globalThis.localStorage.getItem('p2e2/run-mode') === 'legacy' ? 'legacy' : 'player';
-    globalThis.__II_TEST_FLAGS__ = { progression: mode };
-  });
-
   await play.step('00-player-diagnostics-locked', async () => {
-    await play.page.evaluate(() => globalThis.localStorage.removeItem('p2e2/run-mode'));
+    // 不注册 init script：默认就是 player 正式模式。
+    // 先用真实 UI 的「清空存档并重开」清掉默认存档槽（避免自动读档把旧世界带进本次验收），
+    // 再 reload 得到全新开局。
     await play.reload();
     await play.advance(0.8);
+    await play.keyboard.press('Tab');
+    await play.advance(0.2);
+    await play.wait(250);
+    const cleared = await play.page.evaluate(() => {
+      const button = document.querySelector('[data-ii-action="save-new"]');
+      if (!(button instanceof HTMLElement)) return false;
+      button.click();
+      return true;
+    });
+    if (cleared) {
+      await play.wait(500);
+      await play.keyboard.press('Escape');
+      await play.advance(0.2);
+      await play.reload();
+      await play.advance(0.8);
+    }
     let s = await state();
     assert(s.tech?.mode === 'player', 'expected player progression mode');
     assert(s.diagnostics === null, 'diagnostics must be null while line-diagnostics is locked (not an empty array)');
@@ -98,7 +110,7 @@ export default async function playthrough(play) {
     await h.placePartAtPoint(pt, FORGE, 0, 'player-forge', PLAYER_FORGE_CELL);
     s = await state();
     const forge = s.production.machines.find((entry) => entry.recipeId === 'forge-shaft');
-    assert(forge !== undefined, 'player forge must exist and default to forge-shaft');
+    assert(forge !== undefined, 'player forge missing');
     assert(forge.recipeCount === 1, 'player forge must expose 1 recipe, got ' + forge.recipeCount);
     assert(s.diagnostics === null, 'diagnostics must stay null with machines present but capability locked');
     log('00-PLAYER-RECIPES', { recipes: forge.recipeCount, recipeId: forge.recipeId });
@@ -109,23 +121,9 @@ export default async function playthrough(play) {
   // 段 2：legacy 兼容模式 —— 真实产线 + 真实阻塞 + 批量多件产出
   // =========================================================================
   await play.step('01-legacy-diagnostics-unlocked', async () => {
-    await play.page.evaluate(() => globalThis.localStorage.setItem('p2e2/run-mode', 'legacy'));
-    await play.reload();
-    let s = null;
-    const started = Date.now();
-    while (Date.now() - started < 30000) {
-      await play.advance(0.5);
-      try {
-        const now = await state();
-        if (now.tech?.mode === 'legacy' && (now.inventory.find((e) => e.itemId === 'shaft')?.count ?? 0) >= 20) {
-          s = now;
-          break;
-        }
-      } catch (error) {
-        // 启动/切模式的瞬时不可读：继续等。
-      }
-    }
-    assert(s !== null, 'legacy mode (tech.mode=legacy + legacy kit) not ready');
+    // 复用仓库内已被 19 个旧脚本验证过的 helper：它只注册一个 init script（legacy flags+reload+
+    // 轮询 tech.mode 与 16 项套件精确相等）。我们额外传隔离 saveStorageKey，避免跨 run 自动读档污染。
+    const s = await enterLegacyMode(play, { saveStorageKey: LEGACY_SAVE_KEY });
     assert(s.tech?.mode === 'legacy', 'legacy mode must be active');
     assert(s.diagnostics !== null, 'legacy mode unlocks line-diagnostics, so diagnostics must be non-null');
     assert(diag(s).machines.length === 0 && diag(s).links.length === 0, 'fresh legacy world has no machines/links yet');
