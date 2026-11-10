@@ -293,7 +293,11 @@ export const MECHANICAL_PART_DEFS: Readonly<Record<PartId, MechanicalPartDef>> =
     height: MECH_PART_HEIGHT,
     maxTorque: TORQUE_MACHINE,
     loadTorque: FORGE_LOAD,
-    buffers: { input: 6, output: 4 },
+    // P2-E3 修复：输入缓冲必须放得下「整笔原料」的最重配方。
+    // 原 6 放不下 forge-smelter(7)/forge-processing-core(8)/forge-flywheel(12)，
+    // 这会让 T2.3/T2.4/T3.2 的三条配方永远无法开工（整笔扣料被容量挡住）。
+    // 契约测试见 assets/__tests__/recipe-capacity.test.ts。
+    buffers: { input: 12, output: 4 },
     ports: MACHINE_INPUT_PORTS,
   },
   chute: {
