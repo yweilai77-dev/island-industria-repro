@@ -27,6 +27,10 @@ import { createPortFlowGateway } from '../industrial/port-flow.ts';
 import type {} from '../industrial/ports.ts';
 import type {} from '../industrial/assembly-service.ts';
 import { STRUCTURE_TARGET_STATE_KEY, type StructureTargetState } from '../shared/placement-mode.ts';
+import type {} from '../diagnostics/diagnostics.pack.ts';
+import type {} from '../endgame/endgame.pack.ts';
+import type { DiagnosticsSnapshot } from '../diagnostics/diagnostics-types.ts';
+import type { EndgameSnapshot } from '../endgame/endgame-types.ts';
 
 const SYSTEM_NAME = 'island-industria/mechanical-runtime';
 /** 玩家离动力源多近才能摇动摇柄（米，水平距离）。 */
@@ -127,6 +131,20 @@ export const mechanicalRuntime: Plugin = {
           ? world.getResource<StructureTargetState>(STRUCTURE_TARGET_STATE_KEY)
           : undefined;
         const playerPosition = player.state.position;
+        // P2-E2/E3：产线诊断与终局联合工厂只读快照。
+        // 服务可能尚未就绪（挂载顺序/禁用），读取失败只影响这两个字段，不影响机械/生产。
+        let diagnostics: DiagnosticsSnapshot | null = null;
+        let project: EndgameSnapshot | null = null;
+        try {
+          diagnostics = ctx.get('diagnostics')?.snapshot() ?? null;
+        } catch {
+          diagnostics = null;
+        }
+        try {
+          project = ctx.get('endgame')?.snapshot() ?? null;
+        } catch {
+          project = null;
+        }
 
         return {
           ...base,
@@ -140,6 +158,9 @@ export const mechanicalRuntime: Plugin = {
           // P2-E1：科技树只读快照（节点状态/交付进度/解锁集合/追踪目标/进度模式）。
           // 仍然只有唯一 read `mechanical`，不新增第二个 GameRead。
           tech: tech.snapshot(),
+          // P2-E3：诊断（T3.2 能力解锁后非 null）与终局项目（交付进度 + 运行证明）。
+          diagnostics,
+          project,
           inventory: inventorySnapshot,
           player: {
             position: [playerPosition[0], playerPosition[1], playerPosition[2]],

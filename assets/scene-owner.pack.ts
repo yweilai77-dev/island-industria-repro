@@ -73,6 +73,11 @@ export default definePack({
           { $asset: guidText(assetGuid(PACKAGE_IDS.industrial, 'plugin/assembly')) },
           // 动力运行时依赖 mechanical 与 ports 服务，必须在其后挂载。
           { $asset: guidText(assetGuid(PACKAGE_IDS.mechanical, 'plugin/mechanical-runtime')) },
+          // P2-E2/E3：诊断与终局读取 mechanical-runtime 提供的 goalProgress 快照，必须在其后。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.diagnostics, 'plugin/diagnostics')) },
+          { $asset: guidText(assetGuid(PACKAGE_IDS.endgame, 'plugin/endgame')) },
+          // 正式存档最后挂载：恢复时其他系统的服务必须已就绪。
+          { $asset: guidText(assetGuid(PACKAGE_IDS.save, 'plugin/persistence')) },
         ],
       },
     },

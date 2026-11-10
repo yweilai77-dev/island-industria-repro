@@ -40,4 +40,8 @@ export const PACKAGE_IDS = Object.freeze({
   industrial: definePackageId('019fbf00-5b00-7000-8000-000000000000'),
   // M2.0-P2-E1 科技树（数据/状态/门控插件）
   tech: definePackageId('019fbf00-5c00-7000-8000-000000000000'),
+  // M2.0-P2-E2/E3 产线诊断、终局联合工厂、正式存档
+  diagnostics: definePackageId('019fbf00-5d00-7000-8000-000000000000'),
+  endgame: definePackageId('019fbf00-5e00-7000-8000-000000000000'),
+  save: definePackageId('019fbf00-5f00-7000-8000-000000000000'),
 });
