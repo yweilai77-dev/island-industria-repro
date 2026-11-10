@@ -31,6 +31,11 @@ export interface GoalMachineObservation {
   readonly outputItem: ItemId | null;
   readonly outputCount: number;
   readonly running: boolean;
+  /**
+   * 该机器生命周期内累计完成周期数（运行时累计，单调不减）。
+   * P2-E3 运行证明只按「窗口内的增量」求和，绝不把历史累计当成新产出。
+   */
+  readonly producedTotal: number;
 }
 
 /** 目标系统看到的动力源状态（来自 MechanicalSnapshot.sources）。 */

@@ -18,6 +18,7 @@ import type {
   TechNodeSnapshot,
   TechNodeStatus,
   TechProgressionMode,
+  TechProjectCompletionGuard,
   TechSnapshot,
   TechState,
   TechSubmitCode,
@@ -127,7 +128,35 @@ function validateSubmit(
   return { ok: true, node, remaining };
 }
 
-/** 把一次交付应用到状态（纯函数；调用方已确认库存可扣）。 */
+/** 该节点是否是「终局项目」节点（unlocks 里含 project）。 */
+export function isProjectNode(node: TechNodeDef): boolean {
+  return node.unlocks.some((unlock) => unlock.kind === 'project');
+}
+
+/** 节点成本项是否已全部交付（只看 TechState.delivered，不动库存）。 */
+export function costFullyDelivered(node: TechNodeDef, state: TechState): boolean {
+  return node.cost.every((entry) => deliveredOf(state, node.id, entry.itemId) >= entry.count);
+}
+
+/** 还差多少件才交齐（人话，供 UI/门控 blockers）。 */
+export function missingDeliveryBlockers(node: TechNodeDef, state: TechState): readonly string[] {
+  const blockers: string[] = [];
+  for (const entry of node.cost) {
+    const done = deliveredOf(state, node.id, entry.itemId);
+    if (done >= entry.count) continue;
+    const name = getItemDefinition(entry.itemId)?.name ?? entry.itemId;
+    blockers.push(`缺少 ${name} ×${entry.count - done}`);
+  }
+  return blockers;
+}
+
+/**
+ * 把一次交付应用到状态（纯函数；调用方已确认库存可扣）。
+ *
+ * 终局项目节点**永不**因为材料交齐而直接解锁：它的完成必须由
+ * `completeProjectNode` 在「材料已齐 + 完成守卫放行」后显式提交。
+ * 这样「运行证明」与「物品交付」是两个独立条件，谁也不能替谁开路。
+ */
 function applyDelivery(
   state: TechState,
   node: TechNodeDef,
@@ -138,10 +167,25 @@ function applyDelivery(
   nodeDelivered[itemId] = (nodeDelivered[itemId] ?? 0) + count;
   const delivered = { ...state.delivered, [node.id]: nodeDelivered };
   const complete = node.cost.every((entry) => (nodeDelivered[entry.itemId] ?? 0) >= entry.count);
-  const unlocked = complete && !state.unlocked.includes(node.id)
+  const unlocked = complete && !isProjectNode(node) && !state.unlocked.includes(node.id)
     ? [...state.unlocked, node.id]
     : [...state.unlocked];
   return { ...state, delivered, unlocked };
+}
+
+/** 交付结果：材料已交齐但项目节点还需 completeProjectNode（pendingVerification）。 */
+function deliveryResultOf(
+  node: TechNodeDef,
+  state: TechState,
+  next: TechState,
+  base: TechSubmitResult,
+): TechSubmitResult {
+  const completedNow = next.unlocked.length > state.unlocked.length;
+  if (completedNow) return { ...base, completed: true };
+  if (isProjectNode(node) && costFullyDelivered(node, next) && !next.unlocked.includes(node.id)) {
+    return { ...base, completed: false, pendingVerification: true };
+  }
+  return { ...base, completed: false };
 }
 
 /**
@@ -164,10 +208,9 @@ export function submit(
     };
   }
   const next = applyDelivery(state, checked.node, itemId, count);
-  const completed = next.unlocked.length > state.unlocked.length;
   return {
     state: next,
-    result: { ok: true, code: 'ok', nodeId, itemId, count, completed },
+    result: deliveryResultOf(checked.node, state, next, { ok: true, code: 'ok', nodeId, itemId, count }),
   };
 }
 
@@ -191,7 +234,13 @@ export function submitAll(
   if (status === 'completed') return fail('completed');
   if (status === 'locked') return fail('locked');
   const todo = remainingOf(node, state);
-  if (todo.length === 0) return fail('completed');
+  if (todo.length === 0) {
+    // 项目节点：材料已交齐但未完成 → 交给 completeProjectNode（幂等告知，不重复扣料）。
+    if (isProjectNode(node) && costFullyDelivered(node, state) && !state.unlocked.includes(node.id)) {
+      return { state, result: { ok: true, code: 'ok', nodeId, pendingVerification: true }, submitted: [] };
+    }
+    return fail('completed');
+  }
   for (const entry of todo) {
     if (!inventory.has(entry.itemId, entry.count)) return fail('insufficient-items');
   }
@@ -209,8 +258,55 @@ export function submitAll(
   for (const entry of todo) next = applyDelivery(next, node, entry.itemId, entry.count);
   return {
     state: next,
-    result: { ok: true, code: 'ok', nodeId, completed: next.unlocked.length > state.unlocked.length },
+    result: deliveryResultOf(node, state, next, { ok: true, code: 'ok', nodeId }),
     submitted: todo,
+  };
+}
+
+/**
+ * 终局项目节点的**唯一**完成路径（任务书 §五 C3）。
+ *
+ * 要求三件事同时成立，否则返回错误码且状态不变：
+ * 1. 该节点确实解锁 `{ kind: 'project' }`（不是项目节点返回 not-required）；
+ * 2. 全部成本项 `delivered >= count`（只看 TechState.delivered，**绝不动库存**）；
+ * 3. 完成守卫放行（guard 返回 null；未设置 guard 视为放行）。
+ *
+ * 幂等：节点已完成时直接返回 `{ ok: true, completed: true }`，不重复追加 unlocked、不扣任何材料。
+ */
+export function completeProjectNode(
+  state: TechState,
+  nodeId: string,
+  guard: TechProjectCompletionGuard | null = null,
+): { readonly state: TechState; readonly result: TechSubmitResult } {
+  const fail = (code: TechSubmitCode, blockers?: readonly string[]): { state: TechState; result: TechSubmitResult } => ({
+    state,
+    result: { ok: false, code, nodeId, ...(blockers === undefined ? {} : { blockers }) },
+  });
+  const node = techNodeById(nodeId);
+  if (node === undefined) return fail('unknown-node');
+  if (!isProjectNode(node)) return fail('not-required');
+  if (state.unlocked.includes(node.id)) {
+    return { state, result: { ok: true, code: 'ok', nodeId, completed: true } };
+  }
+  if (statusOf(node, state) === 'locked') return fail('locked');
+  if (!costFullyDelivered(node, state)) return fail('not-delivered', missingDeliveryBlockers(node, state));
+  const blockers: string[] = [];
+  if (guard !== null) {
+    for (const unlock of node.unlocks) {
+      if (unlock.kind !== 'project') continue;
+      let reason: string | null = null;
+      try {
+        reason = guard(unlock.id);
+      } catch (error) {
+        reason = '完成守卫异常：' + (error instanceof Error ? error.message : String(error));
+      }
+      if (reason !== null) blockers.push(reason);
+    }
+  }
+  if (blockers.length > 0) return fail('project-blocked', blockers);
+  return {
+    state: { ...state, unlocked: [...state.unlocked, node.id] },
+    result: { ok: true, code: 'ok', nodeId, completed: true },
   };
 }
 

@@ -101,6 +101,7 @@ export function assembleGoalObservation(source: GoalFrameSource): GoalObservatio
     outputItem: machine.outputItem,
     outputCount: machine.outputCount,
     running: machine.running,
+    producedTotal: machine.producedTotal,
   }));
   const sources: GoalSourceObservation[] = source.mechanical.sources.map((powerSource) => ({
     partId: powerSource.partId,

@@ -26,6 +26,7 @@ import {
 } from './gates.ts';
 import { createCatalogResolvers } from './resolvers.ts';
 import {
+  completeProjectNode,
   completedSetOf,
   createTechState,
   restoreTechState,
@@ -39,6 +40,7 @@ import { TECH_NODES, TECH_NODE_COUNT } from './nodes.ts';
 import type {
   TechCapabilityId,
   TechProgressionMode,
+  TechProjectCompletionGuard,
   TechSnapshot,
   TechState,
   TechSubmitResult,
@@ -57,6 +59,13 @@ export interface TechService {
   submit(nodeId: string, itemId: string, count: number): TechSubmitResult;
   /** 一键交齐（补偿事务；任一步失败回滚已扣材料）。 */
   submitAll(nodeId: string): TechSubmitResult;
+  /**
+   * 终局项目节点唯一完成路径：材料已齐 + guard 放行才解锁（不动库存；幂等）。
+   * 普通节点调用返回 not-required；未交齐返回 not-delivered + blockers。
+   */
+  completeProjectNode(nodeId: string): TechSubmitResult;
+  /** 设置/清除项目完成守卫（endgame 用它把「运行证明」接进项目结算）。 */
+  setProjectCompletionGuard(guard: TechProjectCompletionGuard | null): void;
   /** 追踪目标（null = 取消追踪）。 */
   track(nodeId: string | null): boolean;
   isRecipeUnlocked(recipeId: string): boolean;
@@ -89,6 +98,8 @@ export const techPlugin: Plugin = {
 
     let state: TechState = createTechState('player');
     let revision = 0;
+    /** 项目完成守卫（只有 completeProjectNode 使用；null = 放行）。 */
+    let completionGuard: TechProjectCompletionGuard | null = null;
 
     const commit = (next: TechState): void => {
       state = next;
@@ -115,6 +126,14 @@ export const techPlugin: Plugin = {
         const outcome = submitAll(state, nodeId, inventoryPort);
         if (outcome.state !== state) commit(outcome.state);
         return outcome.result;
+      },
+      completeProjectNode: (nodeId) => {
+        const outcome = completeProjectNode(state, nodeId, completionGuard);
+        if (outcome.state !== state) commit(outcome.state);
+        return outcome.result;
+      },
+      setProjectCompletionGuard: (guard) => {
+        completionGuard = guard;
       },
       track: (nodeId) => {
         const outcome = trackNode(state, nodeId);

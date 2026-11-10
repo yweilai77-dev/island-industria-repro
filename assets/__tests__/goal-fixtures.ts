@@ -41,6 +41,7 @@ export function machineState(
     outputItem: null,
     outputCount: 0,
     running: block === 'ok',
+    producedTotal: 0,
     ...overrides,
   };
 }

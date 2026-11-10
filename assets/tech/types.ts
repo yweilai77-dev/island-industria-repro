@@ -114,7 +114,17 @@ export type TechSubmitCode =
   | 'not-required'
   | 'invalid-count'
   | 'exceeds-remaining'
-  | 'insufficient-items';
+  | 'insufficient-items'
+  /** 终局项目节点：交付已齐但运行证明未通过（只有 completeProjectNode 能解锁）。 */
+  | 'not-delivered'
+  /** 终局项目节点：完成守卫拒绝（运行证明未通过 / 其它前置条件未满足）。 */
+  | 'project-blocked';
+
+/**
+ * 项目完成守卫：返回阻塞原因（非 null）表示不允许完成。
+ * 只在 `completeProjectNode` 里使用——普通材料交付永远不受它影响。
+ */
+export type TechProjectCompletionGuard = (projectId: string) => string | null;
 
 /** 交付结果。 */
 export interface TechSubmitResult {
@@ -125,6 +135,13 @@ export interface TechSubmitResult {
   readonly count?: number;
   /** 本次交付是否让节点变成 completed。 */
   readonly completed?: boolean;
+  /**
+   * 材料已交齐但节点尚未完成（终局项目节点：等待运行证明 / 完成守卫）。
+   * 与 `completed` 互斥；节点状态保持 researching。
+   */
+  readonly pendingVerification?: boolean;
+  /** 拒绝完成时的人话阻塞原因（按优先级）。 */
+  readonly blockers?: readonly string[];
 }
 
 /** 库存窄接口：科技交付只依赖这三件事，不建立第二套库存。 */
