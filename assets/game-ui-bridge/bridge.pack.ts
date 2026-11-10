@@ -17,7 +17,12 @@ import {
   type UiStateMessage,
 } from './protocol.ts';
 import type { TechSnapshot } from '../tech/types.ts';
+import type { EndgameSnapshot } from '../endgame/endgame-types.ts';
+import type { DiagnosticsSnapshot } from '../diagnostics/diagnostics-types.ts';
+import type { PersistenceSnapshot } from '../save/persistence.pack.ts';
 import { buildGoalView, goalViewSignature, type UiGoalState } from './goal-view.ts';
+import { attachSaveTransport, forwardSaveCommand, readSaveSnapshot, type PersistenceServiceLike } from './save-bridge.ts';
+import { diagnosticsSignature, projectSignature, saveSignature } from './panel-signatures.ts';
 
 const SYSTEM_NAME = 'island-industria/game-ui-bridge';
 
@@ -68,10 +73,70 @@ export const gameUiBridge: Plugin = {
       }
     };
     const techRevision = (): number => ctx.get('tech')?.revision() ?? -1;
-    const signatureWithGoal = (goal: UiGoalState | null): string =>
+    // P2-E2/E3：终局联合工厂、产线诊断、正式存档的只读快照。
+    // 与 readGoal/readTech 同样的边界：服务缺失/抛错只让该字段为 null，绝不打断 UI 或帧循环。
+    const readProject = (): EndgameSnapshot | null => {
+      try {
+        return ctx.get('endgame')?.snapshot() ?? null;
+      } catch (error) {
+        console.error('P2-E2: failed to read endgame snapshot', error);
+        return null;
+      }
+    };
+    const readDiagnostics = (): DiagnosticsSnapshot | null => {
+      try {
+        return ctx.get('diagnostics')?.snapshot() ?? null;
+      } catch (error) {
+        console.error('P2-E2: failed to read diagnostics snapshot', error);
+        return null;
+      }
+    };
+    const persistenceService = (): PersistenceServiceLike | null => {
+      try {
+        return (ctx.get('persistence') as unknown as PersistenceServiceLike | undefined) ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const readSave = (): PersistenceSnapshot | null => {
+      try {
+        return readSaveSnapshot(persistenceService());
+      } catch (error) {
+        console.error('P2-E2: failed to read persistence snapshot', error);
+        return null;
+      }
+    };
+    const signatureOfState = (
+      goal: UiGoalState | null,
+      project: EndgameSnapshot | null,
+      diagnostics: DiagnosticsSnapshot | null,
+      save: PersistenceSnapshot | null,
+    ): string =>
       stateSignature(definitions, countOf, hotbar.revision)
       + '|' + goalViewSignature(goal)
-      + '|tech:' + String(techRevision());
+      + '|tech:' + String(techRevision())
+      + '|' + projectSignature(project)
+      + '|' + diagnosticsSignature(diagnostics)
+      + '|' + saveSignature(save);
+
+    // 存档下行通道：服务在桥接之后才挂载，apply 时先试一次，之后每帧重试一次（同 pendingFlags）。
+    const postToFrontend = (message: unknown): void => {
+      try {
+        port.postMessage(message);
+      } catch (error) {
+        console.error('P2-E2: failed to post save channel message', error);
+      }
+    };
+    let persistenceAttached = false;
+    const attachPersistence = (): void => {
+      if (persistenceAttached) return;
+      try {
+        if (attachSaveTransport(persistenceService(), postToFrontend)) persistenceAttached = true;
+      } catch (error) {
+        console.error('P2-E2: failed to attach persistence transport', error);
+      }
+    };
+    attachPersistence();
 
     /** hello 携带的测试启动标志：legacy 兼容模式（只由验收脚本通过前端 flags 设置）。 */
     let pendingFlags: UiHelloFlags | null = null;
@@ -88,6 +153,9 @@ export const gameUiBridge: Plugin = {
     const sendState = (): void => {
       revision += 1;
       const goal = readGoal();
+      const project = readProject();
+      const diagnostics = readDiagnostics();
+      const save = readSave();
       const message: UiStateMessage = buildStateMessage({
         revision,
         definitions,
@@ -96,8 +164,11 @@ export const gameUiBridge: Plugin = {
         selected: hotbar.selected,
         goal,
         tech: readTech(),
+        project,
+        diagnostics,
+        save,
       });
-      lastSignature = signatureWithGoal(goal);
+      lastSignature = signatureOfState(goal, project, diagnostics, save);
       try {
         port.postMessage(message);
       } catch (error) {
@@ -163,6 +234,38 @@ export const gameUiBridge: Plugin = {
             sendState();
             return;
           }
+          // P2-E2/E3：终局运行证明。服务缺失/失败都回 error 消息，UI 按 code 给中文反馈。
+          case 'project/proof/begin': {
+            const endgame = ctx.get('endgame');
+            if (!endgame) {
+              sendError('project-unavailable', 'endgame service is not ready');
+              return;
+            }
+            const result = endgame.beginProof();
+            if (!result.ok) sendError(result.code, `proof begin rejected: ${result.code}`);
+            sendState();
+            return;
+          }
+          case 'project/proof/cancel': {
+            const endgame = ctx.get('endgame');
+            if (!endgame) {
+              sendError('project-unavailable', 'endgame service is not ready');
+              return;
+            }
+            endgame.cancelProof();
+            sendState();
+            return;
+          }
+          // P2-E2：正式存档通道（下行 save/write|read|clear 由 persistence 服务经 transport 发出）。
+          case 'save/request':
+          case 'save/restore':
+          case 'save/new':
+          case 'save/data': {
+            const outcome = forwardSaveCommand(persistenceService(), command);
+            if (outcome.error) sendError(outcome.error.code, outcome.error.message);
+            sendState();
+            return;
+          }
           case 'hotbar/select':
             hotbar.select(command.slot);
             sendState();
@@ -203,9 +306,11 @@ export const gameUiBridge: Plugin = {
           fn: () => {
             // 测试启动标志可能在 tech 服务就绪前到达：每帧重试一次。
             if (pendingFlags !== null) applyFlags(pendingFlags ?? undefined);
+            // 存档服务在桥接之后挂载：attach 成功前每帧重试一次。
+            if (!persistenceAttached) attachPersistence();
             hotbar.dropUnavailable((itemId) => inventory.count(itemId));
             const goal = readGoal();
-            const signature = signatureWithGoal(goal);
+            const signature = signatureOfState(goal, readProject(), readDiagnostics(), readSave());
             if (signature !== lastSignature) sendState();
           },
         })

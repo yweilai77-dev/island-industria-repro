@@ -2,8 +2,15 @@
 // 这里不碰 DOM，便于单独测试。
 import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import { parseGoalView, type UiGoalState } from '../game-ui-bridge/goal-view.ts';
+import type { TechSnapshot } from '../tech/types.ts';
+import type { EndgameSnapshot } from '../endgame/endgame-types.ts';
+import type { DiagnosticsSnapshot } from '../diagnostics/diagnostics-types.ts';
+import type { PersistenceSnapshot } from '../save/persistence.pack.ts';
+import { parseTechSnapshot } from './frontend-tech-view.ts';
+import { parseDiagnosticsSnapshot, parseEndgameSnapshot, parseSaveSnapshot } from './frontend-service-view.ts';
 
-export const PROTOCOL_VERSION = 1;
+/** UI 协议版本：与 engine 侧 `assets/game-ui-bridge/protocol.ts` 的 UI_PROTOCOL_VERSION 同步。 */
+export const PROTOCOL_VERSION = 2;
 // 槽位数量以快捷栏服务为唯一来源，避免前端与 Engine 侧槽数各写一份而悄悄失配。
 export const SLOT_COUNT = HOTBAR_SLOT_COUNT;
 
@@ -30,6 +37,14 @@ export interface UiState {
   selectedItemId: string | null;
   /** 工业订单 HUD 数据；null 表示引擎侧尚未就绪（显示初始化状态）。 */
   goal: UiGoalState | null;
+  /** P2-E1/E2 科技树快照；null = 科技服务未就绪。 */
+  tech: TechSnapshot | null;
+  /** P2-E2/E3 终局联合工厂快照；null = 服务未就绪。 */
+  project: EndgameSnapshot | null;
+  /** P2-E2/E3 产线诊断快照；null = 未解锁或服务未就绪。 */
+  diagnostics: DiagnosticsSnapshot | null;
+  /** P2-E2 存档快照；null = 存档服务未就绪。 */
+  save: PersistenceSnapshot | null;
 }
 
 export interface AppControl {
@@ -53,6 +68,10 @@ export interface StateMessage {
   readonly items?: unknown;
   readonly hotbar?: unknown;
   readonly goal?: unknown;
+  readonly tech?: unknown;
+  readonly project?: unknown;
+  readonly diagnostics?: unknown;
+  readonly save?: unknown;
   readonly code?: string;
   readonly message?: string;
 }
@@ -62,9 +81,17 @@ export function isOkResult(result: unknown): boolean {
     && (result as { ok?: unknown }).ok === true;
 }
 
-export function parseState(
-  message: StateMessage,
-): { items: CatalogItem[]; hotbar: HotbarState; goal: UiGoalState | null } | undefined {
+export interface ParsedState {
+  readonly items: CatalogItem[];
+  readonly hotbar: HotbarState;
+  readonly goal: UiGoalState | null;
+  readonly tech: TechSnapshot | null;
+  readonly project: EndgameSnapshot | null;
+  readonly diagnostics: DiagnosticsSnapshot | null;
+  readonly save: PersistenceSnapshot | null;
+}
+
+export function parseState(message: StateMessage): ParsedState | undefined {
   if (message.type !== 'state' || message.v !== PROTOCOL_VERSION) return undefined;
   if (!Array.isArray(message.items)) return undefined;
   const hotbarRaw = message.hotbar as { slots?: unknown; selected?: unknown } | undefined;
@@ -89,5 +116,10 @@ export function parseState(
     items,
     hotbar: { slots, selected: Math.min(SLOT_COUNT - 1, Math.max(0, Math.floor(selected))) },
     goal: parseGoalView(message.goal),
+    // 四个服务快照各自防御式解析：任何一个畸形/缺失只回退为 null，不整包丢弃。
+    tech: parseTechSnapshot(message.tech),
+    project: parseEndgameSnapshot(message.project),
+    diagnostics: parseDiagnosticsSnapshot(message.diagnostics),
+    save: parseSaveSnapshot(message.save),
   };
 }

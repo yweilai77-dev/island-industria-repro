@@ -6,7 +6,10 @@ import type { Plugin } from '@forgeax/engine/plugin';
 import { HOTBAR_SLOT_COUNT } from '../hotbar/hotbar.ts';
 import { itemIconSvg } from './icons.ts';
 import { FRONTEND_UI_CSS } from './frontend-ui-styles.ts';
-import { createGoalPanel } from './frontend-goal-panel.ts';
+import { FRONTEND_TECH_CSS } from './frontend-tech-styles.ts';
+import { createHudStack } from './frontend-hud.ts';
+import { createPanelStack } from './frontend-panel-stack.ts';
+import { installTestHooks } from './frontend-test-hooks.ts';
 import { PROTOCOL_VERSION, isOkResult, parseState } from './frontend-ui-protocol.ts';
 import type { CatalogItem, HostLike, StateMessage, UiState } from './frontend-ui-protocol.ts';
 
@@ -38,7 +41,7 @@ export const frontendUi: Plugin = {
      */
     const testFlags = (globalThis as { __II_TEST_FLAGS__?: unknown }).__II_TEST_FLAGS__;
     const flags = typeof testFlags === 'object' && testFlags !== null
-      ? testFlags as { progression?: 'player' | 'legacy'; techHooks?: boolean }
+      ? testFlags as { progression?: 'player' | 'legacy'; techHooks?: boolean; saveStorageKey?: string }
       : undefined;
     const canvas = host.canvas;
     const onCanvasContextMenu = (event: MouseEvent): void => {
@@ -46,6 +49,9 @@ export const frontendUi: Plugin = {
       event.preventDefault();
     };
     canvas?.addEventListener('contextmenu', onCanvasContextMenu);
+
+    /** 测试入口清理函数（无 techHooks 时为 no-op）。 */
+    let disposeTestHooks: () => void = () => {};
 
     const ui: UiState = {
       open: false,
@@ -55,20 +61,24 @@ export const frontendUi: Plugin = {
       hotbar: { slots: new Array(HOTBAR_SLOT_COUNT).fill(null), selected: 0 },
       selectedItemId: null,
       goal: null,
+      tech: null,
+      project: null,
+      diagnostics: null,
+      save: null,
     };
 
     const doc = root.ownerDocument;
     const style = doc.createElement('style');
-    style.textContent = FRONTEND_UI_CSS;
+    style.textContent = FRONTEND_UI_CSS + FRONTEND_TECH_CSS;
     doc.head.appendChild(style);
 
     const shell = doc.createElement('div');
     shell.className = 'ii-ui';
     root.appendChild(shell);
 
-    // ---- 工业订单 HUD（只读展示，不拦截游戏输入）----
-    const goalPanel = createGoalPanel(doc);
-    shell.appendChild(goalPanel.element);
+    // ---- 左上 HUD：订单 / 科技追踪卡 / Tab 提示（同一位置互斥显示，不拦截输入）----
+    const hud = createHudStack(doc);
+    shell.appendChild(hud.element);
 
     // ---- 快捷栏 ----
     const hotbar = doc.createElement('div');
@@ -134,11 +144,15 @@ export const frontendUi: Plugin = {
     const list = doc.createElement('div');
     list.className = 'ii-list';
     listPanel.appendChild(list);
-    body.appendChild(listPanel);
 
     const detail = doc.createElement('div');
     detail.className = 'ii-detail';
-    body.appendChild(detail);
+
+    // 背包是页签里的第一个 pane；科技/诊断/联合工厂由 panel stack 挂载。
+    const backpackPane = doc.createElement('div');
+    backpackPane.className = 'ii-pane';
+    backpackPane.dataset.pane = 'backpack';
+    backpackPane.append(listPanel, detail);
 
     let dragGhost: HTMLDivElement | undefined;
     let dragPointerId: number | undefined;
@@ -160,6 +174,20 @@ export const frontendUi: Plugin = {
       }
       port.postMessage({ v: PROTOCOL_VERSION, ...message });
     };
+
+    // 页签 + 科技/诊断/联合工厂面板 + 存档页脚。storageKey 可由测试脚手架隔离。
+    const panels = createPanelStack(doc, {
+      head,
+      anchor: closeButton,
+      body,
+      frame,
+      backpackPane,
+      title,
+      subtitle,
+      send,
+      showError,
+      ...(flags?.saveStorageKey ? { saveStorageKey: flags.saveStorageKey } : {}),
+    });
 
     const slotIndexOfItem = (itemId: string): number =>
       ui.hotbar.slots.findIndex((slot) => slot === itemId);
@@ -271,7 +299,8 @@ export const frontendUi: Plugin = {
       hint.textContent = ui.open ? '' : 'Tab 打开背包';
       hint.style.display = ui.open ? 'none' : 'block';
       renderHotbar();
-      goalPanel.render(ui.goal);
+      const { techView, changed } = panels.render(ui);
+      if (changed) hud.render(ui.goal, techView);
       if (ui.open) {
         renderList();
         renderDetail();
@@ -328,6 +357,8 @@ export const frontendUi: Plugin = {
       if (!resumeGame()) return;
       ui.open = false;
       cancelDrag();
+      // 关闭面板触发一次自动存档（与 15s 兜底、页面隐藏、科技提交成功共同覆盖所有进度点）。
+      panels.saveChannel.requestSave();
       render();
     };
 
@@ -425,16 +456,28 @@ export const frontendUi: Plugin = {
         const message = event.data;
         if (!message || typeof message !== 'object') return;
         if (message.type === 'error') {
-          showError(`命令失败：${message.message ?? message.code ?? 'unknown'}`);
+          const result = panels.handleError(message.code ?? 'unknown', message.message ?? '', ui);
+          if (!result.handled) showError(result.text);
           return;
         }
+        // 存档下行消息（save/write|read|clear）由存档通道消费，不是 state。
+        if (panels.saveChannel.handleMessage(message)) return;
         const parsed = parseState(message);
         if (!parsed) return;
         if (typeof message.revision === 'number' && message.revision <= ui.revision) return;
+        const wasTechBusy = panels.techPanel.isBusy();
         ui.revision = typeof message.revision === 'number' ? message.revision : ui.revision;
         ui.items = parsed.items;
         ui.hotbar = parsed.hotbar;
         ui.goal = parsed.goal;
+        ui.tech = parsed.tech;
+        ui.project = parsed.project;
+        ui.diagnostics = parsed.diagnostics;
+        ui.save = parsed.save;
+        // 科技页发起的提交/追踪：拿到新 state 后立即落一次存档。
+        if (wasTechBusy) panels.saveChannel.requestSave();
+        // 首个 state 之后才自动读档（避免在引擎服务就绪前发命令），并刷新存档页脚。
+        panels.notifyState(ui);
         if (ui.selectedItemId !== null && !ui.items.some((item) => item.id === ui.selectedItemId)) {
           ui.selectedItemId = null;
         }
@@ -442,15 +485,8 @@ export const frontendUi: Plugin = {
       };
       port.start?.();
       send({ type: 'hello', ...(flags ? { flags } : {}) });
-      if (flags?.techHooks === true) {
-        // E1 验收入口：调用的是与 E2 科技页完全相同的 MessagePort 命令（真实校验、真实扣料）。
-        (window as unknown as Record<string, unknown>).__II_TEST_TECH__ = {
-          submit: (nodeId: string, itemId: string, count: number) => send({ type: 'tech/submit', nodeId, itemId, count }),
-          submitAll: (nodeId: string) => send({ type: 'tech/submit-all', nodeId }),
-          track: (nodeId: string | null) => send({ type: 'tech/track', nodeId }),
-          requestState: () => send({ type: 'state/request' }),
-        };
-      }
+      // E1/E2/E3 验收入口：与正式 UI 完全相同的协议命令（细节见 frontend-test-hooks.ts）。
+      disposeTestHooks = installTestHooks(window, send, flags ?? {});
     } else {
       showError('与游戏通信失败（端口不可用）');
     }
@@ -470,7 +506,8 @@ export const frontendUi: Plugin = {
       window.removeEventListener('pointerup', onPointerUp, true);
       canvas?.removeEventListener('contextmenu', onCanvasContextMenu);
       if (port) port.onmessage = null;
-      delete (window as unknown as Record<string, unknown>).__II_TEST_TECH__;
+      disposeTestHooks();
+      panels.dispose();
       cancelDrag();
       shell.remove();
       style.remove();

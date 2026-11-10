@@ -13,26 +13,44 @@ const IRON = ITEM_IDS.IRON_ORE;
 
 describe('ui command validation', () => {
   it('accepts the supported commands', () => {
-    expect(parseUiCommand({ v: 1, type: 'hello' }).ok).toBe(true);
-    expect(parseUiCommand({ v: 1, type: 'state/request' }).ok).toBe(true);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 3 })).toEqual({
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hello' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'state/request' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/select', slot: 3 })).toEqual({
       ok: true,
-      command: { v: 1, type: 'hotbar/select', slot: 3 },
+      command: { v: UI_PROTOCOL_VERSION, type: 'hotbar/select', slot: 3 },
     });
-    expect(parseUiCommand({ v: 1, type: 'hotbar/bind', slot: 2, itemId: IRON }).ok).toBe(true);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/unbind', slot: 7 }).ok).toBe(true);
+    // v2 新增命令（P2-E2）：科技页/联合工厂页/存档页脚使用。
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'project/proof/begin' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'project/proof/cancel' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/request' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/restore' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/new', confirm: true }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/data', found: false }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/data', found: true, data: '{}' }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/bind', slot: 2, itemId: IRON }).ok).toBe(true);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/unbind', slot: 7 }).ok).toBe(true);
   });
 
   it('rejects malformed messages', () => {
     expect(parseUiCommand(null).ok).toBe(false);
     expect(parseUiCommand('hello').ok).toBe(false);
     expect(parseUiCommand({ v: 99, type: 'hello' }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'unknown' }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 12 }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: -1 }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/select', slot: 1.5 }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/bind', slot: 0, itemId: 'stone' }).ok).toBe(false);
-    expect(parseUiCommand({ v: 1, type: 'hotbar/bind', slot: 0 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'unknown' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/select', slot: 12 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/select', slot: -1 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/select', slot: 1.5 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/bind', slot: 0, itemId: 'stone' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'hotbar/bind', slot: 0 }).ok).toBe(false);
+    // v2 新命令的非法参数（协议解析层拒绝，不进入引擎）。
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/new' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/new', confirm: 'yes' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/data' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/data', found: true }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'save/data', found: 'no' }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'tech/submit', nodeId: '', itemId: IRON, count: 1 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'tech/submit', nodeId: 'tech:gear-manufacture', itemId: IRON, count: 0 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'tech/track', nodeId: 42 }).ok).toBe(false);
+    expect(parseUiCommand({ v: UI_PROTOCOL_VERSION, type: 'project/proof/begin', extra: 1 }).ok).toBe(true);
   });
 
   it('checks slot indexes', () => {
